@@ -107,4 +107,30 @@
     align-items: center;
     display: inline-flex;
   }
+
+  .rating-number-control {
+    align-items: stretch;
+    display: inline-flex;
+  }
+
+  // Custom +/- spinner replacing the native number input arrows. Two stacked
+  // buttons that together match the input height.
+  .rating-number-steppers {
+    display: flex;
+    flex-direction: column;
+    margin-left: 0.25rem;
+  }
+
+  .rating-number-step {
+    align-items: center;
+    border-radius: 0;
+    display: flex;
+    flex: 1 1 0;
+    line-height: 1;
+    padding: 0 0.4rem;
+
+    .fa-icon {
+      color: inherit;
+    }
+  }
 }

@@ -1,9 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "react-bootstrap";
 import { Icon } from "../Icon";
-import { faPencil, faStar } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCaretDown,
+  faCaretUp,
+  faPencil,
+  faStar,
+} from "@fortawesome/free-solid-svg-icons";
 import { useFocusOnce } from "src/utils/focus";
-import { useStopWheelScroll } from "src/utils/form";
 import { PatchComponent } from "src/patch";
 
 export interface IRatingNumberProps {
@@ -15,120 +19,138 @@ export interface IRatingNumberProps {
   withoutContext?: boolean;
 }
 
+// Ratings are stored as an integer 0-100; the decimal system shows them as
+// 0.0-10.0 (value / 10).
+function formatRating(value: number | null): string {
+  return value == null ? "" : (value / 10).toFixed(1);
+}
+
+// Parse the raw input string back to a 0-100 rating.
+//   ""        -> null      (cleared / unset)
+//   invalid   -> undefined (ignore — leave the field as the user typed it)
+//   otherwise -> clamped, rounded 0-100 (0 collapses to null, i.e. unset)
+function parseRating(raw: string): number | null | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return null;
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) {
+    return undefined;
+  }
+  const clamped = Math.min(10, Math.max(0, n));
+  return Math.round(clamped * 10) || null;
+}
+
+// Allow only a partial decimal as it's typed (e.g. "", "7", "7.", ".5",
+// "10.0"). Anything else (letters, a second dot) is rejected so the field
+// never shows garbage.
+const PARTIAL_DECIMAL = /^\d*\.?\d*$/;
+
 export const RatingNumber = PatchComponent(
   "RatingNumber",
   (props: IRatingNumberProps) => {
     const [editing, setEditing] = useState(false);
-    const [valueStage, setValueStage] = useState<number | null>(props.value);
+    const [focused, setFocused] = useState(false);
+    const [inputValue, setInputValue] = useState(() =>
+      formatRating(props.value)
+    );
 
+    const [ratingRef] = useFocusOnce(editing, true);
+
+    // Mirror the external value into the field whenever it changes — but not
+    // while the user is typing, so an in-progress edit is never clobbered.
     useEffect(() => {
-      setValueStage(props.value);
-    }, [props.value]);
+      if (!focused) {
+        setInputValue(formatRating(props.value));
+      }
+    }, [props.value, focused]);
 
     const showTextField = !props.disabled && (editing || !props.clickToRate);
 
-    const [ratingRef] = useFocusOnce(editing, true);
-    useStopWheelScroll(ratingRef);
-
-    const effectiveValue = editing ? valueStage : props.value;
-
-    const text = ((effectiveValue ?? 0) / 10).toFixed(1);
-    const useValidation = useRef(true);
-
-    function stepChange() {
-      useValidation.current = false;
-    }
-
-    function nonStepChange() {
-      useValidation.current = true;
-    }
-
-    function setCursorPosition(
-      target: HTMLInputElement,
-      pos: number,
-      endPos?: number
-    ) {
-      // This is a workaround to a missing feature where you can't set cursor position in input numbers.
-      // See https://stackoverflow.com/questions/33406169/failed-to-execute-setselectionrange-on-htmlinputelement-the-input-elements
-      target.type = "text";
-
-      target.setSelectionRange(pos, endPos ?? pos);
-      target.type = "number";
-    }
-
-    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    function commit(raw: string) {
       if (!props.onSetRating) {
         return;
       }
-
-      const setRating = editing ? setValueStage : props.onSetRating;
-
-      let val = e.target.value;
-      if (!useValidation.current) {
-        e.target.value = Number(val).toFixed(1);
-        const tempVal = Number(val) * 10;
-        setRating(tempVal || null);
-        useValidation.current = true;
-        return;
-      }
-
-      const match = /(\d?)(\d?)(.?)((\d)?)/g.exec(val);
-      const matchOld = /(\d?)(\d?)(.?)((\d{0,2})?)/g.exec(text ?? "");
-
-      if (match == null) {
-        return;
-      }
-
-      if (match[2] && !(match[2] == "0" && match[1] == "1")) {
-        match[2] = "";
-      }
-      if (match[4] == null || match[4] == "") {
-        match[4] = "0";
-      }
-
-      let value = match[1] + match[2] + "." + match[4];
-      e.target.value = value;
-
-      if (val.length > 0) {
-        if (Number(value) > 10) {
-          value = "10.0";
-        }
-        e.target.value = Number(value).toFixed(1);
-        let tempVal = Number(value) * 10;
-        setRating(tempVal || null);
-
-        let cursorPosition = 0;
-        if (match[2] && !match[4]) {
-          cursorPosition = 3;
-        } else if (matchOld != null && match[1] !== matchOld[1]) {
-          cursorPosition = 2;
-        } else if (
-          matchOld != null &&
-          match[1] === matchOld[1] &&
-          match[2] === matchOld[2] &&
-          match[4] === matchOld[4]
-        ) {
-          cursorPosition = 2;
-        }
-
-        setCursorPosition(e.target, cursorPosition);
+      const rating = parseRating(raw);
+      // undefined => unparseable; leave it, the blur resync will restore it.
+      if (rating !== undefined && rating !== props.value) {
+        props.onSetRating(rating);
       }
     }
 
-    function onBlur() {
+    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+      const raw = e.target.value;
+      if (raw !== "" && !PARTIAL_DECIMAL.test(raw)) {
+        return;
+      }
+      setInputValue(raw);
+      // Forms (clickToRate=false) commit live; the click-to-rate detail view
+      // stages the edit and commits once, on blur, to keep it a single change.
+      if (!props.clickToRate) {
+        commit(raw);
+      }
+    }
+
+    function handleFocus() {
+      setFocused(true);
+    }
+
+    function handleBlur() {
+      setFocused(false);
       if (editing) {
         setEditing(false);
-        if (props.onSetRating && valueStage !== props.value) {
-          props.onSetRating(valueStage);
-        }
       }
+      commit(inputValue);
+    }
+
+    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+      if (e.key === "Enter") {
+        commit(inputValue);
+        e.currentTarget.blur();
+      } else if (e.key === "Escape") {
+        // Abandon the edit and restore the committed value.
+        setInputValue(formatRating(props.value));
+        e.currentTarget.blur();
+      }
+    }
+
+    // +/- stepper buttons replacing the native number spinner. One step is
+    // 0.1 of the displayed value (1 in the stored 0-100 scale), matching the
+    // old input's step="0.1". Steps off whatever is currently in the field.
+    function stepBy(delta: number) {
+      if (!props.onSetRating) {
+        return;
+      }
+      const parsed = parseRating(inputValue);
+      const base = typeof parsed === "number" ? parsed : 0;
+      const next = Math.min(100, Math.max(0, base + delta)) || null;
+      setInputValue(formatRating(next));
+      if (next !== props.value) {
+        props.onSetRating(next);
+      }
+    }
+
+    function renderStepper(delta: number, icon: typeof faCaretUp) {
+      return (
+        <Button
+          variant="secondary"
+          className="rating-number-step"
+          // keep focus on the input so repeated clicks don't blur/commit it
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => stepBy(delta)}
+          tabIndex={-1}
+        >
+          <Icon icon={icon} />
+        </Button>
+      );
     }
 
     if (!showTextField) {
       return (
         <div className="rating-number disabled">
           {props.withoutContext && <Icon icon={faStar} />}
-          <span>{Number((effectiveValue ?? 0) / 10).toFixed(1)}</span>
+          <span>{Number((props.value ?? 0) / 10).toFixed(1)}</span>
           {!props.disabled && props.clickToRate && (
             <Button
               variant="minimal"
@@ -141,26 +163,31 @@ export const RatingNumber = PatchComponent(
           )}
         </div>
       );
-    } else {
-      return (
-        <div className="rating-number">
+    }
+
+    return (
+      <div className="rating-number">
+        <div className="rating-number-control">
           <input
             ref={ratingRef}
             className="text-input form-control"
             name="ratingnumber"
-            type="number"
-            onMouseDown={stepChange}
-            onKeyDown={nonStepChange}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
             onChange={handleChange}
-            onBlur={onBlur}
-            value={text}
-            min="0.0"
-            step="0.1"
-            max="10"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            value={inputValue}
             placeholder="0.0"
           />
+          <div className="rating-number-steppers">
+            {renderStepper(1, faCaretUp)}
+            {renderStepper(-1, faCaretDown)}
+          </div>
         </div>
-      );
-    }
+      </div>
+    );
   }
 );
