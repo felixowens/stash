@@ -1,0 +1,3 @@
+# CI stages the natively-built binary here (cp stash docker/fork/) so it
+# lands inside this scoped build context. Never commit it.
+/stash

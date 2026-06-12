@@ -1,7 +1,16 @@
 # Builds the fork's Docker image and pushes it to GHCR.
 #
+# Strategy: build the UI + Go binary NATIVELY on the runner (with cached
+# Go module/build caches and a cached pnpm store), then package the
+# prebuilt static-pie binary into a thin runtime image
+# (docker/fork/Dockerfile). This is much faster than building inside
+# multi-stage Docker because the heavy caches (GOCACHE, pnpm store)
+# survive between runs, which buildx layer caching can't give us for the
+# compile steps.
+#
 # Tags:
-#   ghcr.io/felixowens/stash:felix            — moving tag, latest build
+#   ghcr.io/felixowens/stash:felix            — moving tag, last GOOD build
+#                                               (only moved AFTER smoke tests)
 #   ghcr.io/felixowens/stash:felix-<shortsha> — immutable, what the homelab
 #                                               repo pins (ansible/roles/media)
 #
@@ -13,14 +22,28 @@ on:
     branches: [felix]
   workflow_dispatch:
 
+# A newer push to felix supersedes an in-flight build. Worst case a
+# cancelled run leaves an untested *immutable* tag on GHCR, which is
+# harmless — pins are explicit and the moving `felix` tag is only ever
+# advanced past the smoke tests below.
+concurrency:
+  group: fork-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # docker/* actions still ship Node20; opt their JS into Node24 ahead of
+  # the June 2026 runner default flip.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # full history so `git describe` produces a sane STASH_VERSION
           fetch-depth: 0
@@ -30,8 +53,98 @@ jobs:
         run: |
           GITHASH=$(git rev-parse --short=8 HEAD)
           BASE=$(git describe --tags --abbrev=0 --exclude latest_develop)
+          VERSION="${BASE}-felix.${GITHASH}"
+          # Exported to the build env so the Makefile's `ifndef` guards
+          # pick them up for BOTH the vite build (VITE_APP_* via ui-env)
+          # and the Go ldflags (build-flags). BUILD_DATE too, else the UI
+          # and Go steps each run scripts/getDate.go and disagree.
+          {
+            echo "GITHASH=$GITHASH"
+            echo "STASH_VERSION=$VERSION"
+            echo "BUILD_DATE=$(date +'%Y-%m-%d %H:%M:%S')"
+          } >> "$GITHUB_ENV"
+          # Step outputs for tag names.
           echo "githash=$GITHASH" >> "$GITHUB_OUTPUT"
-          echo "version=${BASE}-felix.${GITHASH}" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          # setup-go's built-in cache has no restore-keys and only saves
+          # on a key miss, so GOCACHE goes stale on source-only commits.
+          # Manage both caches explicitly below instead.
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v5
+        with:
+          path: ~/go/pkg/mod
+          key: gomod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            gomod-${{ runner.os }}-
+
+      - name: Cache Go build
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/go-build
+          # github.sha suffix always misses → the cache re-saves every
+          # run, so the build cache tracks HEAD instead of freezing at
+          # the last go.sum change.
+          key: gocache-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gocache-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            gocache-${{ runner.os }}-
+
+      # pnpm before setup-node so setup-node can resolve the pnpm store
+      # path for its cache. Pin matches upstream (4.3/4.4 are broken).
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061
+        with:
+          package_json_file: ui/v2.5/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: ui/v2.5/pnpm-lock.yaml
+
+      - name: Codegen + build UI
+        run: |
+          set -euo pipefail
+          # Backend codegen has no dependency on the UI build output, so
+          # run it concurrently with the UI chain (the critical path).
+          make generate-backend generate-login-locale > /tmp/backend-codegen.log 2>&1 &
+          CODEGEN_PID=$!
+
+          # NOT `make pre-ui`: its CI branch repoints the pnpm store to
+          # ~/.pnpm-store *after* setup-node already cached the default
+          # store path, so the cache would never hit.
+          (cd ui/v2.5 && pnpm install --frozen-lockfile)
+          make generate-ui
+          make ui-only
+
+          if ! wait "$CODEGEN_PID"; then
+            echo "::error::backend codegen failed"
+            cat /tmp/backend-codegen.log
+            exit 1
+          fi
+          cat /tmp/backend-codegen.log
+
+      - name: Build binary
+        # static-pie (+ osusergo netgo sqlite_omit_load_extension via
+        # flags-static-pie) → the glibc-host binary runs on alpine/musl,
+        # exactly as upstream's official image is built.
+        run: make flags-release flags-static-pie stash
+
+      - name: Smoke test binary
+        run: |
+          ./stash --version
+          ./stash --version | grep -F "$GITHASH"
+
+      - name: Stage binary into docker context
+        # The repo-root .dockerignore excludes `stash`; copy it into the
+        # scoped docker/fork context (its own .gitignore keeps it out of
+        # git).
+        run: cp stash docker/fork/
 
       - uses: docker/setup-buildx-action@v3
 
@@ -41,18 +154,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - name: Build & push immutable tag
+        uses: docker/build-push-action@v6
         with:
-          context: .
+          context: docker/fork
           file: docker/fork/Dockerfile
           push: true
-          tags: |
-            ghcr.io/felixowens/stash:felix
-            ghcr.io/felixowens/stash:felix-${{ steps.meta.outputs.githash }}
+          # Immutable tag only here; the moving `felix` tag is advanced
+          # below, after the image smoke test passes.
+          tags: ghcr.io/felixowens/stash:felix-${{ steps.meta.outputs.githash }}
           build-args: |
             GITHASH=${{ steps.meta.outputs.githash }}
             STASH_VERSION=${{ steps.meta.outputs.version }}
-          # registry cache: the gha cache backend 404s on export (hit
-          # 2026-06-12); a buildcache tag on GHCR is reliable.
+          # Only the apk+pip layer is expensive now; registry cache keeps
+          # it warm between runs.
           cache-from: type=registry,ref=ghcr.io/felixowens/stash:buildcache
           cache-to: type=registry,ref=ghcr.io/felixowens/stash:buildcache,mode=max
+
+      - name: Smoke test image
+        # Proves the binary actually runs on alpine/musl, pulled from the
+        # registry artifact we just pushed.
+        run: |
+          docker run --rm ghcr.io/felixowens/stash:felix-${{ steps.meta.outputs.githash }} stash --version | grep -F "$GITHASH"
+
+      - name: Advance moving felix tag
+        # Registry-side tag copy (no rebuild/repush of blobs). Only runs
+        # if every step above succeeded, so `felix` always points at a
+        # smoke-tested image.
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/felixowens/stash:felix \
+            ghcr.io/felixowens/stash:felix-${{ steps.meta.outputs.githash }}
