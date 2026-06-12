@@ -297,6 +297,23 @@ export const MainNavbar: React.FC = () => {
   function renderUtilityButtons() {
     return (
       <>
+        {!!import.meta.env.VITE_APP_STASH_VERSION && (
+          <NavLink
+            className="nav-utility"
+            exact
+            to="/settings?tab=about"
+            onClick={handleDismiss}
+          >
+            <Button
+              className="minimal text-muted d-none d-sm-flex align-items-center h-100"
+              title={`${import.meta.env.VITE_APP_STASH_VERSION} (${
+                import.meta.env.VITE_APP_GITHASH ?? "unknown"
+              })`}
+            >
+              <span>{import.meta.env.VITE_APP_STASH_VERSION}</span>
+            </Button>
+          </NavLink>
+        )}
         <Nav.Link
           className="nav-utility"
           href="https://opencollective.com/stashapp"
