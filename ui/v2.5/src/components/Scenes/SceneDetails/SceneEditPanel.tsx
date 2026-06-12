@@ -93,6 +93,9 @@ export const SceneEditPanel: React.FC<IProps> = ({
     useState<boolean>(false);
   const [isStashIDSearchOpen, setIsStashIDSearchOpen] =
     useState<boolean>(false);
+  // Endpoint of the stash-box whose "Search manually" entry was clicked;
+  // undefined means the manual-search modal is closed.
+  const [manualSearchEndpoint, setManualSearchEndpoint] = useState<string>();
   const [scrapedScene, setScrapedScene] = useState<GQL.ScrapedScene | null>();
   const [endpoint, setEndpoint] = useState<string>();
 
@@ -771,6 +774,24 @@ export const SceneEditPanel: React.FC<IProps> = ({
           initialQuery={scene.title ?? ""}
         />
       )}
+      {manualSearchEndpoint !== undefined && (
+        // Manually find a scene on the stash-box (by name or ID) and import
+        // its full metadata — the path for scenes a fingerprint scrape can't
+        // match. The picked result flows into the normal scrape dialog, which
+        // also records the stash id from its remote_site_id.
+        <StashBoxIDSearchModal
+          entityType="scene"
+          stashBoxes={stashConfig?.general.stashBoxes ?? []}
+          initialEndpoint={manualSearchEndpoint}
+          initialQuery={scene.title ?? ""}
+          onSelectItem={() => setManualSearchEndpoint(undefined)}
+          onSelectFullItem={(item, ep) => {
+            setManualSearchEndpoint(undefined);
+            setEndpoint(ep);
+            setScrapedScene(item as GQL.ScrapedSceneDataFragment);
+          }}
+        />
+      )}
       <Form noValidate onSubmit={formik.handleSubmit}>
         <Row className="form-container edit-buttons-container px-3 pt-3">
           <div className="edit-buttons mb-3 pl-0">
@@ -821,6 +842,7 @@ export const SceneEditPanel: React.FC<IProps> = ({
                   stashBoxes={stashConfig?.general.stashBoxes ?? []}
                   scrapers={fragmentScrapers}
                   onScraperClicked={onScrapeClicked}
+                  onStashBoxManualSearch={(ep) => setManualSearchEndpoint(ep)}
                   onReloadScrapers={onReloadScrapers}
                 />
                 <ScraperMenu

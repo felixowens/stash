@@ -4,7 +4,7 @@ import { useIntl } from "react-intl";
 import { Icon } from "./Icon";
 import { stashboxDisplayName } from "src/utils/stashbox";
 import { ScraperSourceInput, StashBox } from "src/core/generated-graphql";
-import { faSyncAlt } from "@fortawesome/free-solid-svg-icons";
+import { faSearch, faSyncAlt } from "@fortawesome/free-solid-svg-icons";
 import { ClearableInput } from "./ClearableInput";
 import useFocus from "src/utils/focus";
 import ScreenUtils from "src/utils/screen";
@@ -16,6 +16,11 @@ export const ScraperMenu: React.FC<{
   scrapers: { id: string; name: string }[];
   onScraperClicked: (s: ScraperSourceInput) => void;
   onReloadScrapers: () => void;
+  // When provided, a "Search manually" group is rendered listing the
+  // stash-boxes; picking one opens a name/ID search whose result imports the
+  // full metadata (vs. the fingerprint scrape the top group does). Optional so
+  // non-scene consumers of this shared menu are unaffected.
+  onStashBoxManualSearch?: (endpoint: string) => void;
 }> = ({
   toggle,
   variant,
@@ -23,6 +28,7 @@ export const ScraperMenu: React.FC<{
   scrapers,
   onScraperClicked,
   onReloadScrapers,
+  onStashBoxManualSearch,
 }) => {
   const intl = useIntl();
   const [filter, setFilter] = useState("");
@@ -89,6 +95,24 @@ export const ScraperMenu: React.FC<{
             {stashboxDisplayName(s.name, index)}
           </Dropdown.Item>
         ))}
+
+        {onStashBoxManualSearch && filteredStashboxes.length > 0 && (
+          <>
+            <Dropdown.Divider />
+            <Dropdown.Header>
+              <Icon icon={faSearch} className="mr-2" />
+              {intl.formatMessage({ id: "actions.search_manually" })}
+            </Dropdown.Header>
+            {filteredStashboxes.map((s, index) => (
+              <Dropdown.Item
+                key={`manual-search-${s.endpoint}`}
+                onClick={() => onStashBoxManualSearch(s.endpoint)}
+              >
+                {stashboxDisplayName(s.name, index)}
+              </Dropdown.Item>
+            ))}
+          </>
+        )}
 
         {filteredStashboxes.length > 0 && filteredScrapers.length > 0 && (
           <Dropdown.Divider />

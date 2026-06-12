@@ -118,6 +118,7 @@
     "scrape_scene_fragment": "Scrape by fragment",
     "scrape_with": "Scrape with…",
     "search": "Search",
+    "search_manually": "Search manually…",
     "select_all": "Select All",
     "select_directory": "Select directory",
     "select_entity": "Select {entityType}",

@@ -33,6 +33,14 @@ interface IProps {
   stashBoxes: GQL.StashBox[];
   excludedStashBoxEndpoints?: string[];
   onSelectItem: (item?: GQL.StashIdInput) => void;
+  // When provided, a click hands back the whole scraped fragment (plus the
+  // endpoint it came from) instead of only its stash id. Lets a caller import
+  // the full metadata it already fetched to render the result list, rather
+  // than discarding everything but the id. onSelectItem is then only invoked
+  // (with undefined) on cancel/close.
+  onSelectFullItem?: (item: SearchResultItem, endpoint: string) => void;
+  // Pre-select this endpoint instead of defaulting to the first stash-box.
+  initialEndpoint?: string;
   initialQuery?: string;
 }
 
@@ -290,6 +298,8 @@ export const StashBoxIDSearchModal: React.FC<IProps> = ({
   stashBoxes,
   excludedStashBoxEndpoints = [],
   onSelectItem,
+  onSelectFullItem,
+  initialEndpoint,
   initialQuery = "",
 }) => {
   const intl = useIntl();
@@ -306,10 +316,14 @@ export const StashBoxIDSearchModal: React.FC<IProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (stashBoxes.length > 0) {
-      setSelectedStashBox(stashBoxes[0]);
+    if (stashBoxes.length === 0) {
+      return;
     }
-  }, [stashBoxes]);
+    const preselected = initialEndpoint
+      ? stashBoxes.find((b) => b.endpoint === initialEndpoint)
+      : undefined;
+    setSelectedStashBox(preselected ?? stashBoxes[0]);
+  }, [stashBoxes, initialEndpoint]);
 
   useEffect(() => inputRef.current?.focus(), []);
 
@@ -363,11 +377,17 @@ export const StashBoxIDSearchModal: React.FC<IProps> = ({
     }
   }, [query, selectedStashBox, Toast, entityType]);
 
-  function handleItemClick(item: IHasRemoteSiteID) {
-    if (selectedStashBox && item.remote_site_id) {
+  function handleItemClick(item: SearchResultItem) {
+    if (onSelectFullItem && selectedStashBox) {
+      onSelectFullItem(item, selectedStashBox.endpoint);
+      return;
+    }
+
+    const remoteSiteID = (item as IHasRemoteSiteID).remote_site_id;
+    if (selectedStashBox && remoteSiteID) {
       onSelectItem({
         endpoint: selectedStashBox.endpoint,
-        stash_id: item.remote_site_id,
+        stash_id: remoteSiteID,
       });
     } else {
       onSelectItem(undefined);
