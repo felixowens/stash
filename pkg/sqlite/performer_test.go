@@ -1717,6 +1717,95 @@ func TestPerformerUpdatePerformerImage(t *testing.T) {
 	}
 }
 
+// Test_PerformerStore_Images exercises the ordered multi-image collection: set,
+// ordering, the image_blob position-0 mirror invariant, indexed access, reorder
+// (re-primary), removal, and that the legacy single-image path collapses the
+// collection while keeping the mirror in sync.
+func Test_PerformerStore_Images(t *testing.T) {
+	if err := withRollbackTxn(func(ctx context.Context) error {
+		qb := db.Performer
+
+		performer := models.Performer{Name: "TestPerformerImages"}
+		if err := qb.Create(ctx, &models.CreatePerformerInput{Performer: &performer}); err != nil {
+			return fmt.Errorf("creating performer: %w", err)
+		}
+		id := performer.ID
+
+		imgA := []byte("image-A")
+		imgB := []byte("image-B")
+		imgC := []byte("image-C")
+
+		// set an ordered collection of three distinct (content-addressed) images
+		if err := qb.UpdateImages(ctx, id, [][]byte{imgA, imgB, imgC}); err != nil {
+			return fmt.Errorf("UpdateImages: %w", err)
+		}
+
+		checksums, err := qb.GetImageChecksums(ctx, id)
+		if err != nil {
+			return err
+		}
+		assert.Len(t, checksums, 3)
+
+		// the position-0 mirror (used by image_path / cards / is_missing) tracks
+		// the primary image
+		primary, err := qb.GetImage(ctx, id)
+		if err != nil {
+			return err
+		}
+		assert.Equal(t, imgA, primary)
+
+		// indexed access matches insertion order; out-of-range is nil
+		b0, _ := qb.GetImageByIndex(ctx, id, 0)
+		b1, _ := qb.GetImageByIndex(ctx, id, 1)
+		b2, _ := qb.GetImageByIndex(ctx, id, 2)
+		assert.Equal(t, imgA, b0)
+		assert.Equal(t, imgB, b1)
+		assert.Equal(t, imgC, b2)
+		bOut, _ := qb.GetImageByIndex(ctx, id, 3)
+		assert.Nil(t, bOut)
+
+		// reorder so C becomes primary
+		if err := qb.SetImages(ctx, id, []string{checksums[2], checksums[0], checksums[1]}); err != nil {
+			return fmt.Errorf("SetImages reorder: %w", err)
+		}
+		reordered, _ := qb.GetImageChecksums(ctx, id)
+		assert.Equal(t, []string{checksums[2], checksums[0], checksums[1]}, reordered)
+		primary, _ = qb.GetImage(ctx, id)
+		assert.Equal(t, imgC, primary)
+
+		// drop the last image; its checksum leaves the collection
+		if err := qb.SetImages(ctx, id, []string{checksums[2], checksums[0]}); err != nil {
+			return fmt.Errorf("SetImages remove: %w", err)
+		}
+		afterRemove, _ := qb.GetImageChecksums(ctx, id)
+		assert.Len(t, afterRemove, 2)
+		assert.NotContains(t, afterRemove, checksums[1])
+
+		// the legacy single-image write collapses the collection to one entry and
+		// keeps the mirror in sync
+		if err := qb.UpdateImage(ctx, id, imgB); err != nil {
+			return fmt.Errorf("UpdateImage collapse: %w", err)
+		}
+		collapsed, _ := qb.GetImageChecksums(ctx, id)
+		assert.Len(t, collapsed, 1)
+		primary, _ = qb.GetImage(ctx, id)
+		assert.Equal(t, imgB, primary)
+
+		// clearing empties both the collection and the mirror
+		if err := qb.UpdateImage(ctx, id, nil); err != nil {
+			return fmt.Errorf("UpdateImage clear: %w", err)
+		}
+		cleared, _ := qb.GetImageChecksums(ctx, id)
+		assert.Empty(t, cleared)
+		primary, _ = qb.GetImage(ctx, id)
+		assert.Nil(t, primary)
+
+		return nil
+	}); err != nil {
+		t.Error(err.Error())
+	}
+}
+
 func TestPerformerQueryAge(t *testing.T) {
 	const age = 19
 	ageCriterion := models.IntCriterionInput{
