@@ -36,7 +36,14 @@ import PerformerScrapeModal from "./PerformerScrapeModal";
 import PerformerStashBoxModal, { IStashBox } from "./PerformerStashBoxModal";
 import StashBoxIDSearchModal from "src/components/Shared/StashBoxIDSearchModal";
 import cx from "classnames";
-import { faSyncAlt, faPlus } from "@fortawesome/free-solid-svg-icons";
+import {
+  faSyncAlt,
+  faPlus,
+  faStar,
+  faTrash,
+  faChevronLeft,
+  faChevronRight,
+} from "@fortawesome/free-solid-svg-icons";
 import isEqual from "lodash-es/isEqual";
 import { formikUtils } from "src/utils/form";
 import {
@@ -127,6 +134,9 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     ignore_auto_tag: yup.boolean().defined(),
     stash_ids: yup.mixed<GQL.StashIdInput[]>().defined(),
     image: yup.string().nullable().optional(),
+    // Ordered headline images. Entries are existing-image serve URLs
+    // (kept/reordered) or base64 data URLs / external URLs (newly added).
+    images: yup.array(yup.string().required()).optional(),
     custom_fields: yup.object().required().defined(),
   });
 
@@ -156,6 +166,7 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     tag_ids: (performer.tags ?? []).map((t) => t.id),
     ignore_auto_tag: performer.ignore_auto_tag ?? false,
     stash_ids: getStashIDs(performer.stash_ids),
+    images: (performer.images ?? []).map((i) => i.url),
     custom_fields: cloneDeep(performer.custom_fields ?? {}),
   };
 
@@ -282,17 +293,11 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     }
     updateTagsStateFromScraper(state.tags ?? undefined);
 
-    // image is a base64 string
-    // #404: don't overwrite image if it has been modified by the user
-    // overwrite if not new since it came from a dialog
-    // overwrite if image is unset
-    if (
-      (!isNew || !formik.values.image) &&
-      state.images &&
-      state.images.length > 0
-    ) {
-      const imageStr = state.images[0];
-      formik.setFieldValue("image", imageStr);
+    // Append all scraped images to the collection (non-destructive — the
+    // user removes any they don't want). Each is a URL or base64 string.
+    if (state.images && state.images.length > 0) {
+      const existing = formik.values.images ?? [];
+      formik.setFieldValue("images", [...existing, ...state.images]);
     }
     if (state.details) {
       formik.setFieldValue("details", state.details);
@@ -330,16 +335,46 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
 
   const encodingImage = ImageUtils.usePasteImage(onImageLoad);
 
+  // Drive the parent's header preview from the primary (first) image.
   useEffect(() => {
-    setImage(formik.values.image);
-  }, [formik.values.image, setImage]);
+    const imgs = formik.values.images ?? [];
+    setImage(imgs.length > 0 ? imgs[0] : null);
+  }, [formik.values.images, setImage]);
 
   useEffect(() => {
     setEncodingImage(encodingImage);
   }, [setEncodingImage, encodingImage]);
 
+  // A loaded image (upload / URL / paste) is appended to the collection.
   function onImageLoad(imageData: string | null) {
-    formik.setFieldValue("image", imageData);
+    if (!imageData) return;
+    formik.setFieldValue("images", [
+      ...(formik.values.images ?? []),
+      imageData,
+    ]);
+  }
+
+  // Photo-tray manipulation helpers.
+  function removeImageAt(idx: number) {
+    const imgs = [...(formik.values.images ?? [])];
+    imgs.splice(idx, 1);
+    formik.setFieldValue("images", imgs);
+  }
+
+  function moveImage(idx: number, delta: number) {
+    const imgs = [...(formik.values.images ?? [])];
+    const j = idx + delta;
+    if (j < 0 || j >= imgs.length) return;
+    [imgs[idx], imgs[j]] = [imgs[j], imgs[idx]];
+    formik.setFieldValue("images", imgs);
+  }
+
+  function makePrimary(idx: number) {
+    const imgs = [...(formik.values.images ?? [])];
+    if (idx <= 0 || idx >= imgs.length) return;
+    const [it] = imgs.splice(idx, 1);
+    imgs.unshift(it);
+    formik.setFieldValue("images", imgs);
   }
 
   function onImageChange(event: React.FormEvent<HTMLInputElement>) {
@@ -558,7 +593,7 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
 
     const currentPerformer = {
       ...formik.values,
-      image: formik.values.image ?? performer.image_path,
+      image: (formik.values.images ?? [])[0] ?? performer.image_path,
     };
 
     return (
@@ -604,15 +639,6 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
           onImageChange={onImageChange}
           onImageURL={onImageLoad}
         />
-        <div>
-          <Button
-            className="mr-2"
-            variant="danger"
-            onClick={() => formik.setFieldValue("image", null)}
-          >
-            <FormattedMessage id="actions.clear_image" />
-          </Button>
-        </div>
         {isNew ? (
           <SplitButton
             id="save-split-button"
@@ -692,6 +718,83 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     return renderField("tag_ids", title, tagsControl());
   }
 
+  // Editable photo tray for the multi-image collection. The first image
+  // is the primary (mirrors image_path / the card thumbnail). Add via the
+  // ImageInput in the action bar; reorder / re-primary / remove here.
+  function renderImagesTray() {
+    const imgs = formik.values.images ?? [];
+    if (imgs.length === 0) return null;
+
+    return (
+      <div
+        className="performer-images-tray"
+        data-testid="performer-images-tray"
+      >
+        {imgs.map((src, idx) => (
+          <div
+            className={cx("performer-images-tray-item", {
+              "is-primary": idx === 0,
+            })}
+            key={`${idx}-${src.slice(-32)}`}
+          >
+            <img src={src} alt={`${formik.values.name} ${idx + 1}`} />
+            {idx === 0 && (
+              <span className="primary-badge">
+                <FormattedMessage id="primary" defaultMessage="Primary" />
+              </span>
+            )}
+            <div className="performer-images-tray-controls">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={idx === 0}
+                title={intl.formatMessage({
+                  id: "actions.move_left",
+                  defaultMessage: "Move left",
+                })}
+                onClick={() => moveImage(idx, -1)}
+              >
+                <Icon icon={faChevronLeft} />
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={idx === 0}
+                title={intl.formatMessage({
+                  id: "actions.make_primary",
+                  defaultMessage: "Make primary",
+                })}
+                onClick={() => makePrimary(idx)}
+              >
+                <Icon icon={faStar} />
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={idx === imgs.length - 1}
+                title={intl.formatMessage({
+                  id: "actions.move_right",
+                  defaultMessage: "Move right",
+                })}
+                onClick={() => moveImage(idx, 1)}
+              >
+                <Icon icon={faChevronRight} />
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                title={intl.formatMessage({ id: "actions.delete" })}
+                onClick={() => removeImageAt(idx)}
+              >
+                <Icon icon={faTrash} />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <>
       {renderScrapeModal()}
@@ -716,6 +819,7 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
         message={intl.formatMessage({ id: "dialogs.unsaved_changes" })}
       />
       {renderButtons("mb-3")}
+      {renderImagesTray()}
 
       <Form noValidate onSubmit={formik.handleSubmit} id="performer-edit">
         {renderInputField("name")}

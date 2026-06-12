@@ -211,23 +211,62 @@ interface IPerformerHeaderImageProps {
   encodingImage: boolean;
   lightboxImages: ILightboxImage[];
   performer: GQL.PerformerDataFragment;
+  isEditing: boolean;
 }
 
 const PerformerHeaderImage: React.FC<IPerformerHeaderImageProps> =
   PatchComponent(
     "PerformerHeaderImage",
-    ({ encodingImage, activeImage, lightboxImages, performer }) => {
+    ({ encodingImage, activeImage, lightboxImages, performer, isEditing }) => {
+      // "Cinematic band" — a large primary photo plus a filmstrip of the
+      // additional headline images. Degrades to the original single hero while
+      // editing (the edit panel owns the preview) or when there's <=1 image.
+      const images = performer.images ?? [];
+      const showBand = !isEditing && images.length > 1;
+
+      if (!showBand) {
+        return (
+          <HeaderImage encodingImage={encodingImage}>
+            {!!activeImage && (
+              <LightboxLink images={lightboxImages}>
+                <DetailImage
+                  className="performer"
+                  src={activeImage}
+                  alt={performer.name}
+                />
+              </LightboxLink>
+            )}
+          </HeaderImage>
+        );
+      }
+
       return (
         <HeaderImage encodingImage={encodingImage}>
-          {!!activeImage && (
-            <LightboxLink images={lightboxImages}>
+          <div className="performer-image-band">
+            <LightboxLink images={lightboxImages} index={0}>
               <DetailImage
-                className="performer"
-                src={activeImage}
+                className="performer performer-image-band-hero"
+                src={images[0].url}
                 alt={performer.name}
               />
             </LightboxLink>
-          )}
+            <div className="performer-image-band-filmstrip">
+              {images.slice(1).map((img) => (
+                <LightboxLink
+                  key={img.index}
+                  images={lightboxImages}
+                  index={img.index}
+                >
+                  <img
+                    className="performer-image-band-thumb"
+                    src={img.url}
+                    alt={`${performer.name} ${img.index + 1}`}
+                    loading="lazy"
+                  />
+                </LightboxLink>
+              ))}
+            </div>
+          </div>
         </HeaderImage>
       );
     }
@@ -270,10 +309,18 @@ const PerformerPage: React.FC<IProps> = PatchComponent(
       return performerImage;
     }, [image, isEditing, performer.image_path]);
 
-    const lightboxImages = useMemo(
-      () => [{ paths: { thumbnail: activeImage, image: activeImage } }],
-      [activeImage]
-    );
+    const lightboxImages = useMemo(() => {
+      // When viewing a performer with a multi-image collection, the
+      // lightbox spans the whole set. While editing (or with no collection) it
+      // falls back to the single active/preview image.
+      const imgs = performer.images ?? [];
+      if (!isEditing && imgs.length > 0) {
+        return imgs.map((i) => ({
+          paths: { thumbnail: i.url, image: i.url },
+        }));
+      }
+      return [{ paths: { thumbnail: activeImage, image: activeImage } }];
+    }, [performer.images, isEditing, activeImage]);
 
     const [updatePerformer] = usePerformerUpdate();
     const [deletePerformer, { loading: isDestroying }] = usePerformerDestroy();
@@ -430,6 +477,7 @@ const PerformerPage: React.FC<IProps> = PatchComponent(
               encodingImage={encodingImage}
               lightboxImages={lightboxImages}
               performer={performer}
+              isEditing={isEditing}
             />
             <div className="row">
               <div className="performer-head col">

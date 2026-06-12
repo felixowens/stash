@@ -10,6 +10,88 @@
     }
   }
 
+  // "Cinematic band" multi-image layout — primary hero + a filmstrip of
+  // the additional headline photos. Only rendered when a performer has >1 image.
+  .performer-image-band {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 14rem;
+
+    .btn-link {
+      line-height: 0;
+      padding: 0;
+    }
+
+    .performer-image-band-filmstrip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .performer-image-band-thumb {
+      border-radius: 0.35rem;
+      cursor: pointer;
+      height: 3.25rem;
+      object-fit: cover;
+      transition: opacity 0.2s;
+      width: 3.25rem;
+
+      &:hover {
+        opacity: 0.75;
+      }
+    }
+  }
+
+  // Edit-mode photo tray for the multi-image collection.
+  .performer-images-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+
+    .performer-images-tray-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      position: relative;
+      width: 7rem;
+
+      img {
+        border-radius: 0.35rem;
+        height: 7rem;
+        object-fit: cover;
+        width: 7rem;
+      }
+
+      &.is-primary img {
+        box-shadow: 0 0 0 2px #ffc107;
+      }
+
+      .primary-badge {
+        background: #ffc107;
+        border-radius: 0.2rem;
+        color: #000;
+        font-size: 0.7rem;
+        left: 0.25rem;
+        padding: 0 0.3rem;
+        position: absolute;
+        top: 0.25rem;
+      }
+
+      .performer-images-tray-controls {
+        display: flex;
+        gap: 0.2rem;
+        justify-content: center;
+
+        .btn {
+          line-height: 1;
+          padding: 0.15rem 0.3rem;
+        }
+      }
+    }
+  }
+
   .content-container {
     padding-bottom: 10px;
   }
