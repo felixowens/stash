@@ -1,0 +1,56 @@
+# Builds the fork's Docker image and pushes it to GHCR.
+#
+# Tags:
+#   ghcr.io/felixowens/stash:felix            — moving tag, latest build
+#   ghcr.io/felixowens/stash:felix-<shortsha> — immutable, what the homelab
+#                                               repo pins (ansible/roles/media)
+#
+# Deploy flow lives in the homelab repo: docs/stash-fork.md.
+name: fork image
+
+on:
+  push:
+    branches: [felix]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # full history so `git describe` produces a sane STASH_VERSION
+          fetch-depth: 0
+
+      - id: meta
+        name: Compute version strings
+        run: |
+          GITHASH=$(git rev-parse --short=8 HEAD)
+          BASE=$(git describe --tags --abbrev=0 --exclude latest_develop)
+          echo "githash=$GITHASH" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE}-felix.${GITHASH}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/fork/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/felixowens/stash:felix
+            ghcr.io/felixowens/stash:felix-${{ steps.meta.outputs.githash }}
+          build-args: |
+            GITHASH=${{ steps.meta.outputs.githash }}
+            STASH_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
