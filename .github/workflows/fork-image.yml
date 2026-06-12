@@ -52,5 +52,7 @@ jobs:
           build-args: |
             GITHASH=${{ steps.meta.outputs.githash }}
             STASH_VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # registry cache: the gha cache backend 404s on export (hit
+          # 2026-06-12); a buildcache tag on GHCR is reliable.
+          cache-from: type=registry,ref=ghcr.io/felixowens/stash:buildcache
+          cache-to: type=registry,ref=ghcr.io/felixowens/stash:buildcache,mode=max
