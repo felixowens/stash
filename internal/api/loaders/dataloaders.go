@@ -21,6 +21,11 @@
 //go:generate go run github.com/vektah/dataloaden SceneOHistoryLoader int []time.Time
 //go:generate go run github.com/vektah/dataloaden ScenePlayHistoryLoader int []time.Time
 //go:generate go run github.com/vektah/dataloaden SceneLastPlayedLoader int *time.Time
+//go:generate go run github.com/vektah/dataloaden ClipOCountLoader int int
+//go:generate go run github.com/vektah/dataloaden ClipPlayCountLoader int int
+//go:generate go run github.com/vektah/dataloaden ClipOHistoryLoader int []time.Time
+//go:generate go run github.com/vektah/dataloaden ClipPlayHistoryLoader int []time.Time
+//go:generate go run github.com/vektah/dataloaden ClipLastPlayedLoader int *time.Time
 package loaders
 
 import (
@@ -51,6 +56,12 @@ type Loaders struct {
 	SceneOHistory     *SceneOHistoryLoader
 	SceneLastPlayed   *SceneLastPlayedLoader
 	SceneCustomFields *CustomFieldsLoader
+
+	ClipPlayCount   *ClipPlayCountLoader
+	ClipOCount      *ClipOCountLoader
+	ClipPlayHistory *ClipPlayHistoryLoader
+	ClipOHistory    *ClipOHistoryLoader
+	ClipLastPlayed  *ClipLastPlayedLoader
 
 	ImageFiles   *ImageFileIDsLoader
 	GalleryFiles *GalleryFileIDsLoader
@@ -216,6 +227,31 @@ func (m Middleware) Middleware(next http.Handler) http.Handler {
 				wait:     wait,
 				maxBatch: maxBatch,
 				fetch:    m.fetchScenesOHistory(ctx),
+			},
+			ClipPlayCount: &ClipPlayCountLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsPlayCount(ctx),
+			},
+			ClipOCount: &ClipOCountLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsOCount(ctx),
+			},
+			ClipPlayHistory: &ClipPlayHistoryLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsPlayHistory(ctx),
+			},
+			ClipOHistory: &ClipOHistoryLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsOHistory(ctx),
+			},
+			ClipLastPlayed: &ClipLastPlayedLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsLastPlayed(ctx),
 			},
 		}
 
@@ -526,6 +562,61 @@ func (m Middleware) fetchScenesLastPlayed(ctx context.Context) func(keys []int) 
 		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
 			var err error
 			ret, err = m.Repository.Scene.GetManyLastViewed(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsOCount(ctx context.Context) func(keys []int) ([]int, []error) {
+	return func(keys []int) (ret []int, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyOCount(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsPlayCount(ctx context.Context) func(keys []int) ([]int, []error) {
+	return func(keys []int) (ret []int, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyViewCount(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsOHistory(ctx context.Context) func(keys []int) ([][]time.Time, []error) {
+	return func(keys []int) (ret [][]time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyODates(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsPlayHistory(ctx context.Context) func(keys []int) ([][]time.Time, []error) {
+	return func(keys []int) (ret [][]time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyViewDates(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsLastPlayed(ctx context.Context) func(keys []int) ([]*time.Time, []error) {
+	return func(keys []int) (ret []*time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyLastViewed(ctx, keys)
 			return err
 		})
 		return ret, toErrorSlice(err)

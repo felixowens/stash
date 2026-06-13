@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/stashapp/stash/pkg/models"
+	"github.com/stashapp/stash/pkg/sliceutil"
 	"github.com/stashapp/stash/pkg/sliceutil/stringslice"
+	"github.com/stashapp/stash/pkg/utils"
 )
 
 func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput) (*models.Clip, error) {
@@ -227,4 +230,178 @@ func (r *mutationResolver) ClipsDestroy(ctx context.Context, ids []string) (bool
 	}
 
 	return true, nil
+}
+
+func (r *mutationResolver) ClipAddO(ctx context.Context, id string, t []*time.Time) (*HistoryMutationResult, error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("converting id: %w", err)
+	}
+
+	var times []time.Time
+
+	// convert time to local time, so that sorting is consistent
+	for _, tt := range t {
+		times = append(times, tt.Local())
+	}
+
+	var updatedTimes []time.Time
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		updatedTimes, err = r.repository.Clip.AddO(ctx, clipID, times)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return &HistoryMutationResult{
+		Count:   len(updatedTimes),
+		History: sliceutil.ValuesToPtrs(updatedTimes),
+	}, nil
+}
+
+func (r *mutationResolver) ClipDeleteO(ctx context.Context, id string, t []*time.Time) (*HistoryMutationResult, error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("converting id: %w", err)
+	}
+
+	var times []time.Time
+
+	for _, tt := range t {
+		times = append(times, *tt)
+	}
+
+	var updatedTimes []time.Time
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		updatedTimes, err = r.repository.Clip.DeleteO(ctx, clipID, times)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return &HistoryMutationResult{
+		Count:   len(updatedTimes),
+		History: sliceutil.ValuesToPtrs(updatedTimes),
+	}, nil
+}
+
+func (r *mutationResolver) ClipResetO(ctx context.Context, id string) (ret int, err error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return 0, fmt.Errorf("converting id: %w", err)
+	}
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Clip.ResetO(ctx, clipID)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+
+	return ret, nil
+}
+
+func (r *mutationResolver) ClipAddPlay(ctx context.Context, id string, t []*time.Time) (*HistoryMutationResult, error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("converting id: %w", err)
+	}
+
+	var times []time.Time
+
+	// convert time to local time, so that sorting is consistent
+	for _, tt := range t {
+		times = append(times, tt.Local())
+	}
+
+	var updatedTimes []time.Time
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		updatedTimes, err = r.repository.Clip.AddViews(ctx, clipID, times)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return &HistoryMutationResult{
+		Count:   len(updatedTimes),
+		History: sliceutil.ValuesToPtrs(updatedTimes),
+	}, nil
+}
+
+func (r *mutationResolver) ClipDeletePlay(ctx context.Context, id string, t []*time.Time) (*HistoryMutationResult, error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("converting id: %w", err)
+	}
+
+	var times []time.Time
+
+	for _, tt := range t {
+		times = append(times, *tt)
+	}
+
+	var updatedTimes []time.Time
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		updatedTimes, err = r.repository.Clip.DeleteViews(ctx, clipID, times)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return &HistoryMutationResult{
+		Count:   len(updatedTimes),
+		History: sliceutil.ValuesToPtrs(updatedTimes),
+	}, nil
+}
+
+func (r *mutationResolver) ClipResetPlayCount(ctx context.Context, id string) (ret int, err error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return 0, fmt.Errorf("converting id: %w", err)
+	}
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Clip.DeleteAllViews(ctx, clipID)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+
+	return ret, nil
+}
+
+func (r *mutationResolver) ClipSaveActivity(ctx context.Context, id string, resumeTime *float64, playDuration *float64) (ret bool, err error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return false, fmt.Errorf("converting id: %w", err)
+	}
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Clip.SaveActivity(ctx, clipID, resumeTime, playDuration)
+		return err
+	}); err != nil {
+		return false, err
+	}
+
+	return ret, nil
+}
+
+func (r *mutationResolver) ClipResetActivity(ctx context.Context, id string, resetResume *bool, resetDuration *bool) (ret bool, err error) {
+	clipID, err := strconv.Atoi(id)
+	if err != nil {
+		return false, fmt.Errorf("converting id: %w", err)
+	}
+
+	if err := r.withTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Clip.ResetActivity(ctx, clipID, utils.IsTrue(resetResume), utils.IsTrue(resetDuration))
+		return err
+	}); err != nil {
+		return false, err
+	}
+
+	return ret, nil
 }

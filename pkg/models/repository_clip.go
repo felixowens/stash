@@ -49,6 +49,8 @@ type ClipReader interface {
 
 	PerformerIDLoader
 	TagIDLoader
+	ViewDateReader
+	ODateReader
 
 	All(ctx context.Context) ([]*Clip, error)
 }
@@ -58,6 +60,11 @@ type ClipWriter interface {
 	ClipCreator
 	ClipUpdater
 	ClipDestroyer
+
+	OHistoryWriter
+	ViewHistoryWriter
+	SaveActivity(ctx context.Context, clipID int, resumeTime *float64, playDuration *float64) (bool, error)
+	ResetActivity(ctx context.Context, clipID int, resetResume bool, resetDuration bool) (bool, error)
 }
 
 // ClipReaderWriter provides all clip methods.

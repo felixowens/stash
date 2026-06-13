@@ -22,10 +22,21 @@ type Clip {
   tags: [Tag!]!
   performers: [Performer!]!
 
+  "The number of times the o counter was incremented"
+  o_counter: Int
+  "The last time the clip was played"
+  last_played_at: Time
   "The time index a clip was left at"
   resume_time: Float
   "The total time a clip has spent playing"
   play_duration: Float
+  "The number of times the clip has been played"
+  play_count: Int
+
+  "Times the clip was played"
+  play_history: [Time!]!
+  "Times the o counter was incremented"
+  o_history: [Time!]!
 
   created_at: Time!
   updated_at: Time!

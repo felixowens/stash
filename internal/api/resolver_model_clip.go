@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"github.com/stashapp/stash/internal/api/loaders"
 	"github.com/stashapp/stash/pkg/models"
@@ -57,4 +58,61 @@ func (r *clipResolver) Performers(ctx context.Context, obj *models.Clip) (ret []
 	var errs []error
 	ret, errs = loaders.From(ctx).PerformerByID.LoadAll(obj.PerformerIDs.List())
 	return ret, firstError(errs)
+}
+
+func (r *clipResolver) OCounter(ctx context.Context, obj *models.Clip) (*int, error) {
+	ret, err := loaders.From(ctx).ClipOCount.Load(obj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ret, nil
+}
+
+func (r *clipResolver) PlayCount(ctx context.Context, obj *models.Clip) (*int, error) {
+	ret, err := loaders.From(ctx).ClipPlayCount.Load(obj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ret, nil
+}
+
+func (r *clipResolver) LastPlayedAt(ctx context.Context, obj *models.Clip) (*time.Time, error) {
+	ret, err := loaders.From(ctx).ClipLastPlayed.Load(obj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func (r *clipResolver) PlayHistory(ctx context.Context, obj *models.Clip) ([]*time.Time, error) {
+	ret, err := loaders.From(ctx).ClipPlayHistory.Load(obj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	ptrRet := make([]*time.Time, len(ret))
+	for i, t := range ret {
+		tt := t
+		ptrRet[i] = &tt
+	}
+
+	return ptrRet, nil
+}
+
+func (r *clipResolver) OHistory(ctx context.Context, obj *models.Clip) ([]*time.Time, error) {
+	ret, err := loaders.From(ctx).ClipOHistory.Load(obj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	ptrRet := make([]*time.Time, len(ret))
+	for i, t := range ret {
+		tt := t
+		ptrRet[i] = &tt
+	}
+
+	return ptrRet, nil
 }
