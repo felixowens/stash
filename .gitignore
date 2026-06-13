@@ -64,3 +64,6 @@ node_modules
 dist
 .DS_Store
 /.local*
+
+# dev-instance.sh throwaway state
+/.dev
