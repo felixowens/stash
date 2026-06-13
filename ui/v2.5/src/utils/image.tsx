@@ -29,6 +29,13 @@ const imageToDataURL = async (url: string) => {
   return blobToDataURL(blob);
 };
 
+// converts a batch of dropped/selected files to base64 data URLs, skipping any
+// non-image entries. Order is preserved. Used by the multi-image dropzone.
+const filesToDataURLs = async (files: FileList | File[]): Promise<string[]> => {
+  const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+  return Promise.all(images.map((f) => blobToDataURL(f)));
+};
+
 // uses event.clipboardData which works in all contexts including insecure HTTP
 const pasteImage = (
   event: ClipboardEvent,
@@ -90,6 +97,7 @@ const ImageUtils = {
   onImageChange,
   usePasteImage,
   imageToDataURL,
+  filesToDataURLs,
   readClipboardImage,
 };
 

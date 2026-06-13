@@ -98,8 +98,16 @@
       rgba(70, 229, 214, 0.62),
       transparent 64%
     ),
-    radial-gradient(46% 80% at 86% 4%, rgba(236, 72, 153, 0.55), transparent 64%),
-    radial-gradient(64% 96% at 54% 104%, rgba(139, 92, 246, 0.6), transparent 66%);
+    radial-gradient(
+      46% 80% at 86% 4%,
+      rgba(236, 72, 153, 0.55),
+      transparent 64%
+    ),
+    radial-gradient(
+      64% 96% at 54% 104%,
+      rgba(139, 92, 246, 0.6),
+      transparent 66%
+    );
   background-size: 190% 190%;
   filter: blur(8px) saturate(1.15);
   inset: 0;
@@ -222,9 +230,9 @@
 // than rotating the element) flows the rainbow round the border while leaving
 // the mask — and the photo — perfectly still.
 @property --foilspin {
-  syntax: "<angle>";
   inherits: false;
   initial-value: 0deg;
+  syntax: "<angle>";
 }
 
 @keyframes performer-foil-flow {
@@ -233,42 +241,43 @@
   }
 }
 
+/* stylelint-disable selector-class-pattern -- intentional BEM __element / --modifier names; renaming would churn the matching classNames in TSX */
 .performer-card-flip {
+  perspective: 1100px;
   position: relative;
   width: 100%;
-  perspective: 1100px;
 
   // The holo cursor-tilt lives on its own wrapper, so pointer-move updates only
   // re-animate this tiny transform — never the flip below. That keeps the flip
   // feeling identical to the plain cards.
   &__tilt {
     position: relative;
-    width: 100%;
     transform-style: preserve-3d;
+    width: 100%;
   }
 
   &__inner {
     position: relative;
-    width: 100%;
     transform-style: preserve-3d;
+    width: 100%;
   }
 
   &__face {
-    border-radius: inherit;
-    backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    border-radius: inherit;
 
     &--front {
-      position: relative; // drives the inner's height via its 2/3 aspect-ratio
       display: block;
+      position: relative; // drives the inner's height via its 2/3 aspect-ratio
     }
 
     &--back {
-      position: absolute;
-      inset: 0;
       height: 100%;
-      width: 100%;
+      inset: 0;
+      position: absolute;
       transform: rotateY(180deg);
+      width: 100%;
     }
   }
 
@@ -330,6 +339,7 @@
     // brightening on hover. (Opaque, not screen-blended — that's what keeps it
     // crisp over light photo edges instead of washing out.)
     .performer-card-flip__rim {
+      animation: performer-foil-flow 9s linear infinite;
       background: conic-gradient(
         from var(--foilspin, 0deg),
         #46e5d6,
@@ -342,18 +352,17 @@
       border-radius: inherit;
       filter: saturate(1.35) drop-shadow(0 0 6px rgba(139, 92, 246, 0.55));
       inset: 0;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
       -webkit-mask: linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
       -webkit-mask-composite: xor;
+      mask-composite: exclude;
       opacity: 0.9;
       padding: 3px;
       pointer-events: none;
       position: absolute;
       transition: opacity 0.3s ease, filter 0.3s ease;
       z-index: 4;
-      animation: performer-foil-flow 9s linear infinite;
     }
 
     &:hover {
@@ -363,8 +372,8 @@
 
       // foil edge brightens & blooms a little on hover
       .performer-card-flip__rim {
-        opacity: 1;
         filter: saturate(1.5) drop-shadow(0 0 10px rgba(139, 92, 246, 0.7));
+        opacity: 1;
       }
     }
   }
@@ -375,13 +384,17 @@
 @media (prefers-reduced-motion: reduce) {
   .performer-card-flip__tilt,
   .performer-card-flip__inner {
+    // !important overrides the higher-specificity --holo / --flippable
+    // motion rules above (a single class can't otherwise win)
+    /* stylelint-disable declaration-no-important */
     transform: none !important;
     transition: none !important;
+    /* stylelint-enable declaration-no-important */
   }
 
   .performer-card-flip__face {
-    backface-visibility: visible;
     -webkit-backface-visibility: visible;
+    backface-visibility: visible;
   }
 
   .performer-card-flip__face--back {
@@ -404,6 +417,7 @@
     animation: none;
   }
 }
+/* stylelint-enable selector-class-pattern */
 
 .card {
   &.performer-card {
@@ -561,5 +575,16 @@
   & > .form-label,
   .form-control {
     font-family: "Courier New", Courier, monospace;
+  }
+}
+
+// the images collection editor at the top of the performer edit form
+.performer-images-field {
+  h6 {
+    color: $text-muted;
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
   }
 }

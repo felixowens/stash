@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, Form, Dropdown, SplitButton } from "react-bootstrap";
 import { FormattedMessage, useIntl } from "react-intl";
 import Mousetrap from "mousetrap";
@@ -11,10 +11,9 @@ import {
   queryScrapePerformerURL,
 } from "src/core/StashService";
 import { Icon } from "src/components/Shared/Icon";
-import { ImageInput } from "src/components/Shared/ImageInput";
+import { ImageCollectionInput } from "src/components/Shared/ImageCollectionInput";
 import { LoadingIndicator } from "src/components/Shared/LoadingIndicator";
 import { CountrySelect } from "src/components/Shared/CountrySelect";
-import ImageUtils from "src/utils/image";
 import { addUpdateStashID, getStashIDs } from "src/utils/stashIds";
 import { stashboxDisplayName } from "src/utils/stashbox";
 import { useToast } from "src/hooks/Toast";
@@ -91,6 +90,16 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
   // Network state
   const [isLoading, setIsLoading] = useState(false);
 
+  // a successful save closes edit mode, unmounting this panel; guard the
+  // post-await setState in onSave so it doesn't fire on the unmounted component
+  const isMountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    []
+  );
+
   const Scrapers = useListPerformerScrapers();
   const [queryableScrapers, setQueryableScrapers] = useState<GQL.Scraper[]>([]);
 
@@ -127,6 +136,7 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     ignore_auto_tag: yup.boolean().defined(),
     stash_ids: yup.mixed<GQL.StashIdInput[]>().defined(),
     image: yup.string().nullable().optional(),
+    images: yup.array(yup.string().required()).defined(),
     custom_fields: yup.object().required().defined(),
   });
 
@@ -156,6 +166,9 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     tag_ids: (performer.tags ?? []).map((t) => t.id),
     ignore_auto_tag: performer.ignore_auto_tag ?? false,
     stash_ids: getStashIDs(performer.stash_ids),
+    images: [...(performer.images ?? [])]
+      .sort((a, b) => a.index - b.index)
+      .map((i) => i.url),
     custom_fields: cloneDeep(performer.custom_fields ?? {}),
   };
 
@@ -282,17 +295,12 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     }
     updateTagsStateFromScraper(state.tags ?? undefined);
 
-    // image is a base64 string
-    // #404: don't overwrite image if it has been modified by the user
-    // overwrite if not new since it came from a dialog
-    // overwrite if image is unset
-    if (
-      (!isNew || !formik.values.image) &&
-      state.images &&
-      state.images.length > 0
-    ) {
-      const imageStr = state.images[0];
-      formik.setFieldValue("image", imageStr);
+    // append any scraped images to the collection (existing order/primary kept)
+    if (state.images && state.images.length > 0) {
+      formik.setFieldValue("images", [
+        ...(formik.values.images ?? []),
+        ...state.images,
+      ]);
     }
     if (state.details) {
       formik.setFieldValue("details", state.details);
@@ -328,33 +336,22 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
     }
   }
 
-  const encodingImage = ImageUtils.usePasteImage(onImageLoad);
-
+  // mirror the primary image (collection index 0) into the live header preview;
+  // null clears it to the placeholder when the collection is emptied
   useEffect(() => {
-    setImage(formik.values.image);
-  }, [formik.values.image, setImage]);
-
-  useEffect(() => {
-    setEncodingImage(encodingImage);
-  }, [setEncodingImage, encodingImage]);
-
-  function onImageLoad(imageData: string | null) {
-    formik.setFieldValue("image", imageData);
-  }
-
-  function onImageChange(event: React.FormEvent<HTMLInputElement>) {
-    ImageUtils.onImageChange(event, onImageLoad);
-  }
+    setImage(formik.values.images?.[0] ?? null);
+  }, [formik.values.images, setImage]);
 
   async function onSave(input: InputValues, andNew?: boolean) {
     setIsLoading(true);
     try {
       await onSubmit(input, andNew);
-      formik.resetForm();
+      if (isMountedRef.current) formik.resetForm();
     } catch (e) {
       Toast.error(e);
+    } finally {
+      if (isMountedRef.current) setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   async function onSaveAndNewClick() {
@@ -599,20 +596,6 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
           </Button>
         ) : null}
         {renderScraperMenu()}
-        <ImageInput
-          isEditing
-          onImageChange={onImageChange}
-          onImageURL={onImageLoad}
-        />
-        <div>
-          <Button
-            className="mr-2"
-            variant="danger"
-            onClick={() => formik.setFieldValue("image", null)}
-          >
-            <FormattedMessage id="actions.clear_image" />
-          </Button>
-        </div>
         {isNew ? (
           <SplitButton
             id="save-split-button"
@@ -718,6 +701,17 @@ export const PerformerEditPanel: React.FC<IPerformerDetails> = ({
       {renderButtons("mb-3")}
 
       <Form noValidate onSubmit={formik.handleSubmit} id="performer-edit">
+        <Form.Group controlId="images" className="performer-images-field">
+          <h6>
+            <FormattedMessage id="images" />
+          </h6>
+          <ImageCollectionInput
+            value={formik.values.images}
+            onChange={(v) => formik.setFieldValue("images", v)}
+            onEncodingChange={setEncodingImage}
+          />
+        </Form.Group>
+        <hr />
         {renderInputField("name")}
         {renderInputField("disambiguation")}
 
