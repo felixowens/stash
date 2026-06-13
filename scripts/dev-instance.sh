@@ -11,13 +11,16 @@
 #
 # Commands:
 #   up [--ui] [--scenario NAME] [--seed-args "..."]
-#                                   build, boot, seed; print the URL
+#                                   ensure ONE instance is up (build/boot/seed if
+#                                   needed, else reuse) and print its URL on stdout.
+#                                   --ui also (re)starts the vite hot-reload UI.
+#                                   idempotent — callers never pick or track ports.
 #                                   scenarios: default|minimal|empty|multi-image|edge
 #   down                            stop processes, remove the instance dir
 #   restart [...]                   rebuild backend + reboot, RE-SEED fresh (same flags as up)
 #   status                          show whether it's up and where
 #   logs [-f]                       print (or follow) the backend log
-#   url                             print the base URL (for scripts)
+#   url                             print the URL to hit (UI if running, else backend)
 #   gql '<query>' ['<vars-json>']   POST a GraphQL query to the running instance
 #
 # State lives in $REPO/.dev (gitignored). One instance at a time, on purpose:
@@ -88,6 +91,26 @@ wait_healthz() {
   die "backend did not become healthy within 40s — see: $0 logs"
 }
 
+# Start the vite hot-reload UI against the running backend, recording UI_* in the
+# env file. Idempotent: a live UI is left running. Call load_env first.
+start_ui() {
+  if [ -n "${UI_PID:-}" ] && kill -0 "$UI_PID" 2>/dev/null; then return 0; fi
+  local uiport; uiport="$(free_port)"
+  say "${c_dim}starting vite UI on :$uiport (hot reload)...${c_rst}"
+  # invoke vite directly (not `pnpm run start --`, whose `--` leaks through and
+  # makes vite ignore --port, binding its config default :3000 instead).
+  # Trailing `</dev/null >/dev/null 2>&1` detaches the subshell's stdio from the
+  # caller's — otherwise the backgrounded vite inherits and holds the caller's
+  # stdout open, so `URL=$(… up --ui)` or `… up --ui | …` hangs forever on EOF.
+  ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$STASH_URL" setsid pnpm exec vite --port "$uiport" --host --strictPort >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" ) </dev/null >/dev/null 2>&1
+  UI_PID="$(cat "$DEV/ui.pid")"; UI_PORT="$uiport"; UI_URL="http://localhost:$uiport"
+  grep -v '^UI_' "$ENVF" >"$ENVF.tmp" 2>/dev/null || true; mv "$ENVF.tmp" "$ENVF"
+  { echo "UI_PID=$UI_PID"; echo "UI_PORT=$UI_PORT"; echo "UI_URL=$UI_URL"; } >>"$ENVF"
+}
+
+# The one URL a caller should hit: the hot-reload UI if running, else the backend.
+primary_url() { echo "${UI_URL:-$STASH_URL}"; }
+
 cmd_up() {
   local with_ui=0 seed_args=""
   while [ $# -gt 0 ]; do
@@ -102,7 +125,9 @@ cmd_up() {
 
   if is_running; then
     load_env
-    ok "already up → $STASH_URL"
+    [ "$with_ui" -eq 1 ] && start_ui   # honor --ui even on an already-running instance
+    ok "already up — reusing → $(primary_url)"
+    primary_url                         # stdout: just the URL, for callers
     return 0
   fi
 
@@ -129,17 +154,14 @@ ENV
   python3 "$REPO/scripts/dev-seed.py" --url "$url" $seed_args >&2 \
     || die "seeding failed (instance still up at $url; see error above)"
 
+  load_env   # re-read so start_ui / primary_url see STASH_URL from the env file
   if [ "$with_ui" -eq 1 ]; then
-    local uiport; uiport="$(free_port)"
-    say "${c_dim}starting vite UI on :$uiport (hot reload)...${c_rst}"
-    # invoke vite directly (not `pnpm run start --`, whose `--` leaks through and
-    # makes vite ignore --port, binding its config default :3000 instead).
-    ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$url" setsid pnpm exec vite --port "$uiport" --host --strictPort >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" )
-    { echo "UI_PID=$(cat "$DEV/ui.pid")"; echo "UI_PORT=$uiport"; echo "UI_URL=http://localhost:$uiport"; } >>"$ENVF"
-    ok "UP — built UI: $url   |   vite (hot reload): http://localhost:$uiport"
+    start_ui
+    ok "UP — built UI: $STASH_URL   |   vite (hot reload): $UI_URL"
   else
-    ok "UP — $url   (playground: $url/playground)"
+    ok "UP — $STASH_URL   (playground: $STASH_URL/playground)"
   fi
+  primary_url   # stdout: the URL a caller should hit
 }
 
 cmd_down() {
@@ -170,7 +192,7 @@ cmd_logs() {
   if [ "${1:-}" = "-f" ]; then tail -f "$LOG"; else cat "$LOG"; fi
 }
 
-cmd_url() { load_env 2>/dev/null && echo "$STASH_URL" || die "not up"; }
+cmd_url() { load_env 2>/dev/null && primary_url || die "not up (run: $0 up)"; }
 
 cmd_gql() {
   load_env 2>/dev/null || die "not up"

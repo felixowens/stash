@@ -17,7 +17,7 @@ This is **not** a community open-source project you're contributing to. There is
 The #1 past failure was shipping UI changes that looked right in the diff but were broken or visually wrong. **A change is not done until you've seen it work in a real browser.**
 
 For any UI or behavior change:
-1. `./scripts/dev-instance.sh up` — spins up a populated instance and prints its URL (`http://localhost:99xx`).
+1. `./scripts/dev-instance.sh up` — ensures a populated instance is up (reuses one if already running) and **prints its URL on stdout** (`http://localhost:99xx`), so you never pick or track ports. Capture it: `URL=$(./scripts/dev-instance.sh up)`.
 2. Drive it with the **chrome-devtools** MCP: `new_page` / `navigate_page` to the relevant page, then `take_screenshot` and actually look.
 3. `list_console_messages` (errors + warns) must be **clean**.
 4. "Looks right **and** no console errors" = done. *Compiles ≠ done.*
@@ -30,10 +30,10 @@ One command → a throwaway, **populated** Stash you can drive. No setup wizard 
 
 | Command | Does |
 |---|---|
-| `up [--ui] [--scenario NAME]` | build, boot on a free port, seed. `--ui` also starts the vite hot-reload UI |
+| `up [--ui] [--scenario NAME]` | **idempotent** — ensure one instance is up (build/boot/seed if needed, else reuse) and print its URL on stdout. `--ui` also (re)starts the vite hot-reload UI, even on an already-running instance. Callers never pick ports |
 | `down` | stop and remove the instance (state lives in `.dev/`, gitignored) |
 | `restart [...]` | rebuild backend + reboot, fresh seed (takes the same flags as `up`) |
-| `status` / `url` | where it is |
+| `status` / `url` | where it is (`url` prints the URL to hit — vite UI if running, else backend) |
 | `logs [-f]` | backend log |
 | `gql '<query>' '[vars-json]'` | POST a GraphQL query to the running instance |
 

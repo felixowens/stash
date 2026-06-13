@@ -9,13 +9,14 @@ The prime directive (CLAUDE.md): **a UI change is not done until you've seen it 
 
 ## 1. Make sure a populated instance is up
 
+`up` is idempotent: it builds/boots/seeds (~80 performers, 25 studios, 40 tags) only if nothing's running, else reuses the live one, and **prints the URL to hit on stdout**. One line gets you a ready instance *and* its URL — no `status`/port-juggling:
+
 ```
-./scripts/dev-instance.sh status      # is it up?
-./scripts/dev-instance.sh up          # if not — builds, boots, seeds (~80 performers, 25 studios, 40 tags)
-./scripts/dev-instance.sh url         # the base URL (http://localhost:99xx)
+URL=$(./scripts/dev-instance.sh up)          # ready instance → its URL (http://localhost:99xx)
+URL=$(./scripts/dev-instance.sh up --ui)     # …plus the vite hot-reload UI (edits show on refresh)
 ```
 
-- Iterating on UI code? `up --ui` also starts the **vite hot-reload** UI so edits show on refresh without a rebuild.
+- `up --ui` also (re)starts vite even on an already-running instance; `URL` is then the vite URL.
 - After a **backend** change: `./scripts/dev-instance.sh restart` (rebuild + reseed) first, or the binary is stale.
 
 ## 2. Open the page(s) your change touched
