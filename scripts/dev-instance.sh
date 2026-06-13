@@ -97,19 +97,42 @@ start_ui() {
   if [ -n "${UI_PID:-}" ] && kill -0 "$UI_PID" 2>/dev/null; then return 0; fi
   local uiport; uiport="$(free_port)"
   say "${c_dim}starting vite UI on :$uiport (hot reload)...${c_rst}"
-  # invoke vite directly (not `pnpm run start --`, whose `--` leaks through and
-  # makes vite ignore --port, binding its config default :3000 instead).
+  # Run the vite binary directly (not `pnpm exec vite`): with pnpm in the middle
+  # the recorded pid isn't vite's process-group leader, so `down` can't group-kill
+  # it. Direct → $! is vite itself, a clean setsid session leader. (Not `pnpm run
+  # start --` either — its `--` leaks through and vite ignores --port, binding :3000.)
   # Trailing `</dev/null >/dev/null 2>&1` detaches the subshell's stdio from the
-  # caller's — otherwise the backgrounded vite inherits and holds the caller's
-  # stdout open, so `URL=$(… up --ui)` or `… up --ui | …` hangs forever on EOF.
-  ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$STASH_URL" setsid pnpm exec vite --port "$uiport" --host --strictPort >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" ) </dev/null >/dev/null 2>&1
+  # caller's — otherwise the backgrounded vite holds the caller's stdout open, so
+  # `URL=$(… up --ui)` or `… up --ui | …` hangs forever waiting on EOF.
+  ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$STASH_URL" setsid node_modules/.bin/vite --port "$uiport" --host --strictPort >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" ) </dev/null >/dev/null 2>&1
   UI_PID="$(cat "$DEV/ui.pid")"; UI_PORT="$uiport"; UI_URL="http://localhost:$uiport"
   grep -v '^UI_' "$ENVF" >"$ENVF.tmp" 2>/dev/null || true; mv "$ENVF.tmp" "$ENVF"
   { echo "UI_PID=$UI_PID"; echo "UI_PORT=$UI_PORT"; echo "UI_URL=$UI_URL"; } >>"$ENVF"
+  # Wait for vite to actually bind before returning, so `up --ui` hands back a URL
+  # that's ready to hit — and the server is live for a later `down` to kill cleanly.
+  local i
+  for i in $(seq 1 60); do
+    ss -tlnH "sport = :$uiport" 2>/dev/null | grep -q . && return 0
+    kill -0 "$UI_PID" 2>/dev/null || { say "${c_red}vite exited at startup — see $UILOG${c_rst}"; return 0; }
+    sleep 0.5
+  done
+  say "${c_dim}vite slow to bind :$uiport — continuing; see $UILOG${c_rst}"
 }
 
 # The one URL a caller should hit: the hot-reload UI if running, else the backend.
 primary_url() { echo "${UI_URL:-$STASH_URL}"; }
+
+# Kill whatever is listening on a TCP port, plus its whole process group — a
+# teardown backstop, since vite under pnpm doesn't reliably sit in UI_PID's group.
+kill_port() {
+  local port="$1" lpid pgid
+  # `|| true`: under `set -e`, grep finding no listener must not abort the caller.
+  lpid=$(ss -tlnpH "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)
+  [ -z "$lpid" ] && return 0
+  pgid=$(ps -o pgid= -p "$lpid" 2>/dev/null | tr -d ' ' || true)
+  if [ -n "$pgid" ]; then kill -TERM -- "-$pgid" 2>/dev/null || true
+  else kill -TERM "$lpid" 2>/dev/null || true; fi
+}
 
 cmd_up() {
   local with_ui=0 seed_args=""
@@ -168,7 +191,15 @@ cmd_down() {
   if load_env 2>/dev/null; then
     for pidvar in BACKEND_PID UI_PID; do
       local pid="${!pidvar:-}"
-      [ -n "$pid" ] && kill -TERM -- "-$pid" 2>/dev/null || true
+      [ -n "$pid" ] || continue
+      kill -TERM -- "-$pid" 2>/dev/null || true   # its process group…
+      kill -TERM "$pid"     2>/dev/null || true   # …and the pid itself (group may not be formed yet)
+    done
+    # Backstop: the backend pid is a clean group leader, but vite runs under a
+    # pnpm wrapper whose group the recorded UI_PID doesn't reliably lead — so the
+    # group kills above can miss it. Also kill whatever still holds either port.
+    for port in "${UI_PORT:-}" "${BACKEND_PORT:-}"; do
+      [ -n "$port" ] && kill_port "$port"
     done
   fi
   rm -rf "$DEV"
