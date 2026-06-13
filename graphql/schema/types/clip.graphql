@@ -1,0 +1,90 @@
+"""
+A Clip is a virtual, non-destructive viewable asset: a [start_seconds,
+end_seconds] range of a source scene with its own rating, tags, performers,
+studio, date and engagement. Playback streams the source scene on the fly, so a
+clip is removed when its source scene is deleted.
+"""
+type Clip {
+  id: ID!
+  title: String
+  details: String
+  date: String
+  # rating expressed as 1-100
+  rating100: Int
+  organized: Boolean!
+
+  "The source scene this clip is carved from"
+  scene: Scene!
+  start_seconds: Float!
+  end_seconds: Float!
+
+  studio: Studio
+  tags: [Tag!]!
+  performers: [Performer!]!
+
+  "The time index a clip was left at"
+  resume_time: Float
+  "The total time a clip has spent playing"
+  play_duration: Float
+
+  created_at: Time!
+  updated_at: Time!
+}
+
+input ClipCreateInput {
+  scene_id: ID!
+  start_seconds: Float!
+  end_seconds: Float!
+  title: String
+  details: String
+  date: String
+  # rating expressed as 1-100
+  rating100: Int
+  organized: Boolean
+  studio_id: ID
+  tag_ids: [ID!]
+  """
+  Performers for the clip. If omitted, the performers of the source scene are
+  copied onto the clip at creation.
+  """
+  performer_ids: [ID!]
+}
+
+input ClipUpdateInput {
+  clientMutationId: String
+  id: ID!
+  title: String
+  details: String
+  date: String
+  # rating expressed as 1-100
+  rating100: Int
+  organized: Boolean
+  scene_id: ID
+  start_seconds: Float
+  end_seconds: Float
+  studio_id: ID
+  tag_ids: [ID!]
+  performer_ids: [ID!]
+}
+
+input BulkClipUpdateInput {
+  clientMutationId: String
+  ids: [ID!]
+  # rating expressed as 1-100
+  rating100: Int
+  organized: Boolean
+  studio_id: ID
+  tag_ids: BulkUpdateIds
+  performer_ids: BulkUpdateIds
+}
+
+input ClipDestroyInput {
+  id: ID!
+  "If true, delete the generated preview/screenshot files for the clip"
+  delete_generated: Boolean
+}
+
+type FindClipsResultType {
+  count: Int!
+  clips: [Clip!]!
+}

@@ -33,6 +33,9 @@ var (
 
 	sceneMarkersTagsJoinTable = goqu.T(sceneMarkersTagsTable)
 
+	clipsTagsJoinTable       = goqu.T(clipsTagsTable)
+	clipsPerformersJoinTable = goqu.T(performersClipsTable)
+
 	performersAliasesJoinTable  = goqu.T(performersAliasesTable)
 	performersURLsJoinTable     = goqu.T(performerURLsTable)
 	performerImagesJoinTable    = goqu.T(performerImagesTable)
@@ -244,6 +247,47 @@ var (
 			idColumn: goqu.T(scenesODatesTable).Col(sceneIDColumn),
 		},
 		dateColumn: goqu.T(scenesODatesTable).Col(sceneODateColumn),
+	}
+)
+
+var (
+	clipTableMgr = &table{
+		table:    goqu.T(clipTable),
+		idColumn: goqu.T(clipTable).Col(idColumn),
+	}
+
+	clipsTagsTableMgr = &joinTable{
+		table: table{
+			table:    clipsTagsJoinTable,
+			idColumn: clipsTagsJoinTable.Col(clipIDColumn),
+		},
+		fkColumn:     clipsTagsJoinTable.Col(tagIDColumn),
+		foreignTable: tagTableMgr,
+		orderBy:      tagTableSort,
+	}
+
+	clipsPerformersTableMgr = &joinTable{
+		table: table{
+			table:    clipsPerformersJoinTable,
+			idColumn: clipsPerformersJoinTable.Col(clipIDColumn),
+		},
+		fkColumn: clipsPerformersJoinTable.Col(performerIDColumn),
+	}
+
+	clipsViewTableMgr = &viewHistoryTable{
+		table: table{
+			table:    goqu.T(clipsViewDatesTable),
+			idColumn: goqu.T(clipsViewDatesTable).Col(clipIDColumn),
+		},
+		dateColumn: goqu.T(clipsViewDatesTable).Col(clipViewDateColumn),
+	}
+
+	clipsOTableMgr = &viewHistoryTable{
+		table: table{
+			table:    goqu.T(clipsODatesTable),
+			idColumn: goqu.T(clipsODatesTable).Col(clipIDColumn),
+		},
+		dateColumn: goqu.T(clipsODatesTable).Col(clipODateColumn),
 	}
 )
 

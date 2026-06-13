@@ -122,6 +122,13 @@ type Query {
     ids: [ID!]
   ): FindGalleriesResultType!
 
+  findClip(id: ID!): Clip
+  findClips(
+    clip_filter: ClipFilterType
+    filter: FindFilterType
+    ids: [ID!]
+  ): FindClipsResultType!
+
   findTag(id: ID!): Tag
   findTags(
     tag_filter: TagFilterType
@@ -358,6 +365,12 @@ type Mutation {
   bulkGalleryUpdate(input: BulkGalleryUpdateInput!): [Gallery!]
   galleryDestroy(input: GalleryDestroyInput!): Boolean!
   galleriesUpdate(input: [GalleryUpdateInput!]!): [Gallery]
+
+  clipCreate(input: ClipCreateInput!): Clip
+  clipUpdate(input: ClipUpdateInput!): Clip
+  bulkClipUpdate(input: BulkClipUpdateInput!): [Clip!]
+  clipDestroy(input: ClipDestroyInput!): Boolean!
+  clipsDestroy(ids: [ID!]!): Boolean!
 
   addGalleryImages(input: GalleryAddInput!): Boolean!
   removeGalleryImages(input: GalleryRemoveInput!): Boolean!

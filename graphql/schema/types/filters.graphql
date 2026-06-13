@@ -609,6 +609,50 @@ input GalleryFilterType {
   custom_fields: [CustomFieldCriterionInput!]
 }
 
+input ClipFilterType {
+  AND: ClipFilterType
+  OR: ClipFilterType
+  NOT: ClipFilterType
+
+  id: IntCriterionInput
+  title: StringCriterionInput
+  details: StringCriterionInput
+  "Filter by rating expressed as 1-100"
+  rating100: IntCriterionInput
+  "Filter by organized"
+  organized: Boolean
+  "Filter by clip duration (end_seconds - start_seconds) in seconds"
+  duration: IntCriterionInput
+  "Filter to only include clips with this studio"
+  studios: HierarchicalMultiCriterionInput
+  "Filter to only include clips with these tags"
+  tags: HierarchicalMultiCriterionInput
+  "Filter by tag count"
+  tag_count: IntCriterionInput
+  "Filter to only include clips with these performers"
+  performers: MultiCriterionInput
+  "Filter by performer count"
+  performer_count: IntCriterionInput
+  "Filter to only include clips carved from these scenes"
+  scenes: MultiCriterionInput
+  "Filter by o counter"
+  o_counter: IntCriterionInput
+  "Filter by play count"
+  play_count: IntCriterionInput
+  "Filter by date"
+  date: DateCriterionInput
+  "Filter by created at"
+  created_at: TimestampCriterionInput
+  "Filter by updated at"
+  updated_at: TimestampCriterionInput
+  "Filter by related scenes that meet this criteria"
+  scenes_filter: SceneFilterType
+  "Filter by related studios that meet this criteria"
+  studios_filter: StudioFilterType
+  "Filter by related tags that meet this criteria"
+  tags_filter: TagFilterType
+}
+
 input TagFilterType {
   AND: TagFilterType
   OR: TagFilterType
@@ -972,6 +1016,7 @@ enum FilterMode {
   GROUPS
   TAGS
   IMAGES
+  CLIPS
 }
 
 type SavedFilter {

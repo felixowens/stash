@@ -383,6 +383,29 @@ func (_m *PerformerReaderWriter) GetImage(ctx context.Context, performerID int) 
 	return r0, r1
 }
 
+// GetImageByIndex provides a mock function with given fields: ctx, performerID, index
+func (_m *PerformerReaderWriter) GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error) {
+	ret := _m.Called(ctx, performerID, index)
+
+	var r0 []byte
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) []byte); ok {
+		r0 = rf(ctx, performerID, index)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
+		r1 = rf(ctx, performerID, index)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetImageChecksums provides a mock function with given fields: ctx, performerID
 func (_m *PerformerReaderWriter) GetImageChecksums(ctx context.Context, performerID int) ([]string, error) {
 	ret := _m.Called(ctx, performerID)
@@ -420,29 +443,6 @@ func (_m *PerformerReaderWriter) GetImageCount(ctx context.Context, performerID 
 	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
 		r1 = rf(ctx, performerID)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// GetImageByIndex provides a mock function with given fields: ctx, performerID, index
-func (_m *PerformerReaderWriter) GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error) {
-	ret := _m.Called(ctx, performerID, index)
-
-	var r0 []byte
-	if rf, ok := ret.Get(0).(func(context.Context, int, int) []byte); ok {
-		r0 = rf(ctx, performerID, index)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]byte)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
-		r1 = rf(ctx, performerID, index)
 	} else {
 		r1 = ret.Error(1)
 	}
