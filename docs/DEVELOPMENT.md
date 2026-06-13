@@ -1,5 +1,7 @@
 # Building from Source
 
+> **New here? Read [`CLAUDE.md`](../CLAUDE.md) first** — architecture, the codegen/migration gotchas, and the verify loop. For day-to-day work the fast path is the populated dev instance (`./scripts/dev-instance.sh up`), not a full from-source build. This doc is the toolchain reference for when you do need to build from scratch.
+
 ## Pre-requisites
 
 * [Go](https://golang.org/dl/)
@@ -55,7 +57,7 @@ NOTE: The `make` command in OpenBSD will be `gmake`. For example, `make pre-ui` 
 * `make build-release` - Builds release versions (debug information removed) of both the `stash` and `phasher` binaries, alias for `make flags-release flags-pie build`
 * `make docker-build` - Locally builds and tags a complete 'stash/build' docker image
 * `make docker-cuda-build` - Locally builds and tags a complete 'stash/cuda-build' docker image
-* `make validate` - Runs all of the tests and checks required to submit a PR
+* `make validate` - Runs all of the tests and checks (lint + tests, UI + backend)
 * `make lint` - Runs `golangci-lint` on the backend
 * `make it` - Runs all unit and integration tests
 * `make fmt` - Formats the Go source code
