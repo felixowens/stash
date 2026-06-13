@@ -85,6 +85,65 @@
   /* stylelint-enable selector-class-pattern */
 }
 
+// ---------------------------------------------------------------------------
+// S-tier holo backdrop — performers rated 80+ wear a drifting prismatic aurora
+// behind the detail header, layered over the (optional) blurred background
+// image and below the content (screen-blended, so it glows off the dark
+// header without touching the text). Same rarity gate as the card's foil edge.
+// ---------------------------------------------------------------------------
+#performer-page .performer-holo-aurora {
+  animation: performer-aurora 20s ease-in-out infinite;
+  background: radial-gradient(
+      54% 90% at 12% 10%,
+      rgba(70, 229, 214, 0.62),
+      transparent 64%
+    ),
+    radial-gradient(46% 80% at 86% 4%, rgba(236, 72, 153, 0.55), transparent 64%),
+    radial-gradient(64% 96% at 54% 104%, rgba(139, 92, 246, 0.6), transparent 66%);
+  background-size: 190% 190%;
+  filter: blur(8px) saturate(1.15);
+  inset: 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  position: absolute;
+  z-index: 10; // above .background-image-container, below .detail-container (z20)
+
+  // a second, slower layer drifting the opposite way → organic, non-looping depth
+  &::after {
+    animation: performer-aurora 28s ease-in-out infinite reverse;
+    background: radial-gradient(
+      40% 52% at 38% 36%,
+      rgba(107, 255, 158, 0.45),
+      transparent 64%
+    );
+    background-size: 170% 170%;
+    content: "";
+    filter: blur(14px);
+    inset: 0;
+    mix-blend-mode: screen;
+    opacity: 0.55;
+    position: absolute;
+  }
+}
+
+@keyframes performer-aurora {
+  0%,
+  100% {
+    background-position: 0% 0%;
+  }
+
+  50% {
+    background-position: 100% 70%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #performer-page .performer-holo-aurora,
+  #performer-page .performer-holo-aurora::after {
+    animation: none;
+  }
+}
+
 .new-view {
   margin-bottom: 2rem;
 

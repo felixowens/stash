@@ -336,7 +336,7 @@ const PerformerCardDetails: React.FC<IPerformerCardProps> = PatchComponent(
 
 // Top-rated performers earn a holographic "foil" card, like a rare trading
 // card. rating100 is 0-100; >= 80 (8.0+ on the decimal scale) is the S tier.
-const HOLO_RATING_THRESHOLD = 80;
+export const HOLO_RATING_THRESHOLD = 80;
 
 function prefersReducedMotion(): boolean {
   return (

@@ -36,6 +36,7 @@ import { useLoadStickyHeader } from "src/hooks/detailsPanel";
 import { useScrollToTopOnMount } from "src/hooks/scrollToTop";
 import { ExternalLinkButtons } from "src/components/Shared/ExternalLinksButton";
 import { BackgroundImage } from "src/components/Shared/DetailsPage/BackgroundImage";
+import { HOLO_RATING_THRESHOLD } from "../PerformerCard";
 import {
   TabTitleCounter,
   useTabKey,
@@ -406,6 +407,10 @@ const PerformerPage: React.FC<IProps> = PatchComponent(
         />
       );
 
+    // S-tier performers (same rating gate as the card's holo foil) get a
+    // drifting prismatic aurora behind the detail header.
+    const sTier = (performer.rating100 ?? 0) >= HOLO_RATING_THRESHOLD;
+
     const headerClassName = cx("detail-header", {
       edit: isEditing,
       collapsed,
@@ -423,6 +428,9 @@ const PerformerPage: React.FC<IProps> = PatchComponent(
             imagePath={activeImage ?? undefined}
             show={enableBackgroundImage && !isEditing}
           />
+          {sTier && !isEditing && (
+            <div className="performer-holo-aurora" aria-hidden />
+          )}
           <div className="detail-container">
             <PerformerHeaderImage
               activeImage={activeImage}
