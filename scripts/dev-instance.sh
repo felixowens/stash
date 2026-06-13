@@ -132,7 +132,9 @@ ENV
   if [ "$with_ui" -eq 1 ]; then
     local uiport; uiport="$(free_port)"
     say "${c_dim}starting vite UI on :$uiport (hot reload)...${c_rst}"
-    ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$url" setsid pnpm run start -- --port "$uiport" --host >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" )
+    # invoke vite directly (not `pnpm run start --`, whose `--` leaks through and
+    # makes vite ignore --port, binding its config default :3000 instead).
+    ( cd "$REPO/ui/v2.5" && VITE_APP_PLATFORM_URL="$url" setsid pnpm exec vite --port "$uiport" --host --strictPort >"$UILOG" 2>&1 & echo $! >"$DEV/ui.pid" )
     { echo "UI_PID=$(cat "$DEV/ui.pid")"; echo "UI_PORT=$uiport"; echo "UI_URL=http://localhost:$uiport"; } >>"$ENVF"
     ok "UP — built UI: $url   |   vite (hot reload): http://localhost:$uiport"
   else
