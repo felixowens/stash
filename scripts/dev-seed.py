@@ -7,9 +7,20 @@ real API can never drift from the schema. It also exercises the actual
 mutations — including the fork's performer `images` collection — so the seed
 doubles as a smoke test of the write path.
 
-Usage:
-    dev-seed.py --url http://localhost:PORT [--performers 80] [--studios 25] [--tags 40]
+Scenarios let you boot into a *specific* state to verify against:
 
+    default      ~80 performers / 25 studios / 40 tags, 1-3 images each (the norm)
+    minimal      a handful of each — fast boot for a quick visual check
+    empty        nothing — verify empty-state UI / a clean library
+    multi-image  fewer performers, but 2-4 images each — exercise the collection
+    edge         gnarly names (unicode, emoji, very long, quotes, XSS probe) to
+                 catch rendering/escaping bugs
+
+Usage:
+    dev-seed.py --url http://localhost:PORT [--scenario NAME]
+                [--performers N] [--studios N] [--tags N] [--dry-run]
+
+Explicit --performers/--studios/--tags override the scenario's counts.
 Reads name word-lists from scripts/test_db_generator/*.txt. Stdlib only.
 """
 import argparse
@@ -26,6 +37,31 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WORDS = os.path.join(HERE, "test_db_generator")
 GENDERS = ["FEMALE", "MALE", "NON_BINARY", "TRANSGENDER_FEMALE"]
 COUNTRIES = ["US", "GB", "DE", "FR", "JP", "BR", "CA", "AU", "SE", "CZ"]
+
+# scenario -> default counts + knobs. images is the (min, max) per performer.
+SCENARIOS = {
+    "default":     {"performers": 80, "studios": 25, "tags": 40},
+    "minimal":     {"performers": 6,  "studios": 3,  "tags": 5},
+    "empty":       {"performers": 0,  "studios": 0,  "tags": 0},
+    "multi-image": {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4)},
+    "edge":        {"performers": 0,  "studios": 4,  "tags": 6,  "edge": True},
+}
+
+# Names engineered to break naive rendering/escaping. If any of these visibly
+# corrupts the UI (or the XSS probe executes), that's the bug the scenario exists
+# to surface.
+EDGE_NAMES = [
+    "Zoë Ñoño-Łódź",
+    "李娜 Lǐ Nà",
+    "O'Brien-Müller",
+    "A Very Long Performer Name That Should Overflow The Card Layout For Sure",
+    "𝕬𝖊𝖘𝖙𝖍𝖊𝖙𝖎𝖈 Unicode",
+    "emoji 🎬🔥 name",
+    "<script>alert('xss')</script>",
+    "Ünïcödé Tëst",
+    'quote " and \\ backslash',
+    "trailing spaces   ",
+]
 
 
 def gql(url, query, variables=None):
@@ -76,26 +112,61 @@ def load_words(name, fallback):
         return fallback
 
 
+def performer_names(rng, count, edge, female, male, surname):
+    """Return a list of (name, gender) specs to create."""
+    specs = []
+    if edge:
+        for name in EDGE_NAMES:
+            specs.append((name, rng.choice(GENDERS)))
+    for _ in range(count):
+        gender = rng.choices(GENDERS, weights=[70, 18, 6, 6])[0]
+        first = rng.choice(female if "FEMALE" in gender else male)
+        specs.append((f"{first} {rng.choice(surname)}", gender))
+    return specs
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
-    ap.add_argument("--performers", type=int, default=80)
-    ap.add_argument("--studios", type=int, default=25)
-    ap.add_argument("--tags", type=int, default=40)
+    ap.add_argument("--scenario", choices=sorted(SCENARIOS), default="default")
+    ap.add_argument("--performers", type=int, help="override scenario count")
+    ap.add_argument("--studios", type=int, help="override scenario count")
+    ap.add_argument("--tags", type=int, help="override scenario count")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="resolve + preview without touching the API")
     ap.add_argument("--seed", type=int, default=1234, help="RNG seed for reproducibility")
     args = ap.parse_args()
     rng = random.Random(args.seed)
+
+    sc = SCENARIOS[args.scenario]
+    n_perf = args.performers if args.performers is not None else sc["performers"]
+    n_studio = args.studios if args.studios is not None else sc["studios"]
+    n_tag = args.tags if args.tags is not None else sc["tags"]
+    img_lo, img_hi = sc.get("images", (1, 3))
+    edge = sc.get("edge", False)
 
     female = load_words("female.txt", ["Ava", "Mia", "Zoe"])
     male = load_words("male.txt", ["Max", "Leo", "Sam"])
     surname = load_words("surname.txt", ["Stone", "Vale", "Cross"])
     studio_words = load_words("studio.txt", ["Apex", "Lumen", "Vertex"])
+    tag_pool = load_words("scene.txt", ["solo", "duo", "outdoor", "vintage"])
+
+    specs = performer_names(rng, n_perf, edge, female, male, surname)
+
+    print(f"  scenario:   {args.scenario}  (images {img_lo}-{img_hi}/performer)")
+
+    if args.dry_run:
+        print(f"  would create: {len(specs)} performers, {n_studio} studios, {n_tag} tags")
+        for name, gender in specs[:8]:
+            print(f"    - {name!r} [{gender}]")
+        if len(specs) > 8:
+            print(f"    … and {len(specs) - 8} more")
+        return
 
     # Tags
-    tag_pool = load_words("scene.txt", ["solo", "duo", "outdoor", "vintage"])
     tag_ids = []
     seen = set()
-    for _ in range(args.tags):
+    for _ in range(n_tag):
         name = rng.choice(tag_pool).title()
         if name in seen:
             name = f"{name} {rng.randint(2, 99)}"
@@ -111,7 +182,7 @@ def main():
     # Studios
     studio_ids = []
     seen = set()
-    for _ in range(args.studios):
+    for _ in range(n_studio):
         name = " ".join(rng.sample(studio_words, k=min(2, len(studio_words)))).title()
         if name in seen:
             name = f"{name} {rng.randint(2, 99)}"
@@ -129,11 +200,8 @@ def main():
 
     # Performers — with the fork's multi-image `images` collection
     made = 0
-    for n in range(args.performers):
-        gender = rng.choices(GENDERS, weights=[70, 18, 6, 6])[0]
-        first = rng.choice(female if gender.startswith("FEMALE") or "FEMALE" in gender else male)
-        name = f"{first} {rng.choice(surname)}"
-        n_imgs = rng.randint(1, 3)
+    for name, gender in specs:
+        n_imgs = rng.randint(img_lo, img_hi)
         images = [
             png_data_url(
                 (rng.randint(40, 230), rng.randint(40, 230), rng.randint(40, 230))
@@ -161,7 +229,7 @@ def main():
         except RuntimeError as exc:
             print(f"  performer '{name}' failed: {exc}", file=sys.stderr)
             raise
-    print(f"  performers: {made} (with 1-3 images each)")
+    print(f"  performers: {made} (with {img_lo}-{img_hi} images each)")
 
     # Boot clean: suppress the first-run release-notes modal so an agent opening
     # the instance lands straight on real content.

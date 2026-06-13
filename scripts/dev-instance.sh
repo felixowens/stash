@@ -10,9 +10,11 @@
 # usable, populated UI.
 #
 # Commands:
-#   up [--ui] [--seed-args "..."]   build, boot, seed; print the URL
+#   up [--ui] [--scenario NAME] [--seed-args "..."]
+#                                   build, boot, seed; print the URL
+#                                   scenarios: default|minimal|empty|multi-image|edge
 #   down                            stop processes, remove the instance dir
-#   restart                         rebuild backend + reboot, RE-SEED fresh
+#   restart [...]                   rebuild backend + reboot, RE-SEED fresh (same flags as up)
 #   status                          show whether it's up and where
 #   logs [-f]                       print (or follow) the backend log
 #   url                             print the base URL (for scripts)
@@ -91,7 +93,8 @@ cmd_up() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --ui) with_ui=1 ;;
-      --seed-args) seed_args="$2"; shift ;;
+      --scenario) seed_args="$seed_args --scenario $2"; shift ;;
+      --seed-args) seed_args="$seed_args $2"; shift ;;
       *) die "unknown flag: $1" ;;
     esac
     shift
@@ -189,5 +192,5 @@ case "$cmd" in
   logs)    cmd_logs "$@" ;;
   url)     cmd_url ;;
   gql)     cmd_gql "$@" ;;
-  *) say "usage: $0 {up [--ui] [--seed-args \"...\"]|down|restart|status|logs [-f]|url|gql <q> [vars]}"; exit 2 ;;
+  *) say "usage: $0 {up [--ui] [--scenario NAME] [--seed-args \"...\"]|down|restart|status|logs [-f]|url|gql <q> [vars]}"; exit 2 ;;
 esac

@@ -30,14 +30,15 @@ One command → a throwaway, **populated** Stash you can drive. No setup wizard 
 
 | Command | Does |
 |---|---|
-| `up [--ui]` | build, boot on a free port, seed. `--ui` also starts the vite hot-reload UI |
+| `up [--ui] [--scenario NAME]` | build, boot on a free port, seed. `--ui` also starts the vite hot-reload UI |
 | `down` | stop and remove the instance (state lives in `.dev/`, gitignored) |
-| `restart` | rebuild backend + reboot, fresh seed |
+| `restart [...]` | rebuild backend + reboot, fresh seed (takes the same flags as `up`) |
 | `status` / `url` | where it is |
 | `logs [-f]` | backend log |
 | `gql '<query>' '[vars-json]'` | POST a GraphQL query to the running instance |
 
-Seeding logic + data live in `scripts/dev-seed.py` (stdlib only). Extend it to construct specific scenarios you need to verify against.
+**Scenarios** (`--scenario`, default `default`) boot into a *specific* state to verify against:
+`minimal` (a handful, fast) · `empty` (verify empty-state UI) · `multi-image` (2-4 images/performer, exercises the collection) · `edge` (gnarly names — unicode, emoji, overflow, XSS probe — to catch rendering/escaping bugs). Preview any without booting: `python3 scripts/dev-seed.py --url x --scenario edge --dry-run`. Seeding logic lives in `scripts/dev-seed.py` (stdlib only) — add a scenario there when you need a new shape.
 
 ## Architecture — where things live
 
