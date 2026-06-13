@@ -64,14 +64,18 @@ The schema drives **two** generators. After editing `graphql/schema/**`:
 make generate          # regenerates BOTH backend (Go) and UI (src/core/generated-graphql.ts)
 ```
 
-`make generate-backend` / `make generate-ui` do one side. Forgetting this leaves stale generated types → the backend won't build or the UI types won't match the API. Always regenerate after a schema change, then build.
+Forgetting this leaves stale generated types → the backend won't build or the UI types won't match the API. Always regenerate after a schema change, then build. `make generate-backend` / `make generate-ui` do one side.
+
+**Verify it:** `./scripts/check-codegen.sh` regenerates and fails if the committed output was stale — use it before a build or in CI. *(Editing any `.graphql` file also fires a hook reminder — see `scripts/hooks/post-edit-guard.py`.)*
 
 ## Migrations
 
-To change the DB schema:
+**Fast path:** `./scripts/new-migration.sh <snake_name> [--go]` computes the next `NN`, writes `NN_<name>.up.sql`, **bumps `appSchemaVersion` for you**, and with `--go` drops a compiling `NN_postmigrate.go` stub. Then write your DDL and `./scripts/dev-instance.sh restart`.
+
+By hand (what the script automates):
 1. Add `pkg/sqlite/migrations/NN_<name>.up.sql`, where `NN` = next number (highest is currently **86**). Files auto-embed via `//go:embed migrations/*.sql`.
-2. **Bump `appSchemaVersion` in `pkg/sqlite/database.go`** (currently `= 86`). *This is the step that's easy to forget* — without it the new file is ignored and the DB silently won't migrate.
-3. For data transforms (not just DDL), add `pkg/sqlite/migrations/NN_postmigrate.go` — see existing `*_postmigrate.go` / `84_migrate.go` for the pattern.
+2. **Bump `appSchemaVersion` in `pkg/sqlite/database.go`** (currently `= 86`). *This is the step that's easy to forget* — without it the new file is ignored and the DB silently won't migrate. *(Hand-writing a migration file fires a hook reminder about this.)*
+3. For data transforms (not just DDL), add `pkg/sqlite/migrations/NN_postmigrate.go`, registered via `sqlite.RegisterPostMigration(NN, postNN)` — see existing `*_postmigrate.go` / `84_migrate.go` for the pattern (`--go` scaffolds it).
 
 The dev instance builds its DB at the current `appSchemaVersion`, so after adding a migration just `dev-instance.sh restart` to get a DB on the new schema.
 
