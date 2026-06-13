@@ -21,10 +21,6 @@ fragment PerformerData on Performer {
   favorite
   ignore_auto_tag
   image_path
-  images {
-    index
-    url
-  }
   scene_count
   image_count
   image_collection_count
