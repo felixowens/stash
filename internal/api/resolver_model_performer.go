@@ -219,6 +219,17 @@ func (r *performerResolver) ImageCount(ctx context.Context, obj *models.Performe
 	return ret, nil
 }
 
+func (r *performerResolver) ImageCollectionCount(ctx context.Context, obj *models.Performer) (ret int, err error) {
+	if err := r.withReadTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Performer.GetImageCount(ctx, obj.ID)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+
+	return ret, nil
+}
+
 func (r *performerResolver) GalleryCount(ctx context.Context, obj *models.Performer) (ret int, err error) {
 	if err := r.withReadTxn(ctx, func(ctx context.Context) error {
 		ret, err = gallery.CountByPerformerID(ctx, r.repository.Gallery, obj.ID)

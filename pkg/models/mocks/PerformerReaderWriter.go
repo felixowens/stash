@@ -406,6 +406,27 @@ func (_m *PerformerReaderWriter) GetImageChecksums(ctx context.Context, performe
 	return r0, r1
 }
 
+// GetImageCount provides a mock function with given fields: ctx, performerID
+func (_m *PerformerReaderWriter) GetImageCount(ctx context.Context, performerID int) (int, error) {
+	ret := _m.Called(ctx, performerID)
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func(context.Context, int) int); ok {
+		r0 = rf(ctx, performerID)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, performerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetImageByIndex provides a mock function with given fields: ctx, performerID, index
 func (_m *PerformerReaderWriter) GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error) {
 	ret := _m.Called(ctx, performerID, index)

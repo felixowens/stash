@@ -50,6 +50,10 @@ const sortByOptions = [
       value: "images_count",
     },
     {
+      messageID: "image_collection_count",
+      value: "image_collection_count",
+    },
+    {
       messageID: "gallery_count",
       value: "galleries_count",
     },

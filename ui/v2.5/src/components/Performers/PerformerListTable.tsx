@@ -210,6 +210,12 @@ export const PerformerListTable: React.FC<IPerformerListTableProps> = (
     </Link>
   );
 
+  // Headshot-collection size (performer_images). Plain count — unlike image_count
+  // there's no per-performer list page to link to.
+  const ImageCollectionCountCell = (performer: GQL.PerformerDataFragment) => (
+    <span>{performer.image_collection_count}</span>
+  );
+
   const OCounterCell = (performer: GQL.PerformerDataFragment) => (
     <>{performer.o_counter}</>
   );
@@ -349,6 +355,12 @@ export const PerformerListTable: React.FC<IPerformerListTableProps> = (
       label: intl.formatMessage({ id: "images" }),
       defaultShow: true,
       render: ImageCountCell,
+    },
+    {
+      value: "image_collection_count",
+      label: intl.formatMessage({ id: "image_collection_count" }),
+      defaultShow: true,
+      render: ImageCollectionCountCell,
     },
     {
       value: "o_counter",

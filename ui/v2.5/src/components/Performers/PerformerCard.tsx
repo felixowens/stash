@@ -16,7 +16,7 @@ import {
 } from "src/models/list-filter/criteria/criterion";
 import { PopoverCountButton } from "../Shared/PopoverCountButton";
 import GenderIcon from "./GenderIcon";
-import { faLink, faTag } from "@fortawesome/free-solid-svg-icons";
+import { faImages, faLink, faTag } from "@fortawesome/free-solid-svg-icons";
 import { faInstagram, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import { RatingBanner } from "../Shared/RatingBanner";
 import { usePerformerUpdate } from "src/core/StashService";
@@ -140,9 +140,25 @@ const PerformerCardPopovers: React.FC<IPerformerCardProps> = PatchComponent(
       );
     }
 
+    function maybeRenderImageCollectionButton() {
+      // Only when there's an actual collection (every performer has a primary).
+      if (performer.image_collection_count <= 1) return;
+
+      return (
+        <Button
+          className="minimal image-collection-count"
+          title={`${performer.image_collection_count} photos`}
+        >
+          <Icon icon={faImages} />
+          <span>{performer.image_collection_count}</span>
+        </Button>
+      );
+    }
+
     if (
       performer.scene_count ||
       performer.image_count ||
+      performer.image_collection_count > 1 ||
       performer.gallery_count ||
       performer.tags.length > 0 ||
       performer.o_counter ||
@@ -155,6 +171,7 @@ const PerformerCardPopovers: React.FC<IPerformerCardProps> = PatchComponent(
             {maybeRenderScenesPopoverButton()}
             {maybeRenderGroupsPopoverButton()}
             {maybeRenderImagesPopoverButton()}
+            {maybeRenderImageCollectionButton()}
             {maybeRenderGalleriesPopoverButton()}
             {maybeRenderTagPopoverButton()}
             {maybeRenderOCounter()}

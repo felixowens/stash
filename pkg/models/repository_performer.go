@@ -91,6 +91,9 @@ type PerformerReader interface {
 	// GetImageChecksums returns the performer's ordered image blob checksums
 	// (position 0 == primary).
 	GetImageChecksums(ctx context.Context, performerID int) ([]string, error)
+	// GetImageCount returns the number of images in the performer's headshot
+	// collection (performer_images). Backs the image_collection_count field.
+	GetImageCount(ctx context.Context, performerID int) (int, error)
 	// GetImageByIndex returns the Nth image in the ordered collection (0 ==
 	// primary), or nil when out of range.
 	GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error)

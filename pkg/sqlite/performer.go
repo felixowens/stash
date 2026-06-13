@@ -837,6 +837,7 @@ var performerSortOptions = sortOptions{
 	"galleries_count",
 	"height",
 	"id",
+	"image_collection_count",
 	"images_count",
 	"last_o_at",
 	"last_played_at",
@@ -884,6 +885,8 @@ func (qb *PerformerStore) getPerformerSort(findFilter *models.FindFilterType) (s
 		sortQuery += qb.sortByScenesSize(direction)
 	case "images_count":
 		sortQuery += getCountSort(performerTable, performersImagesTable, performerIDColumn, direction)
+	case "image_collection_count":
+		sortQuery += getCountSort(performerTable, performerImagesTable, performerIDColumn, direction)
 	case "galleries_count":
 		sortQuery += getCountSort(performerTable, performersGalleriesTable, performerIDColumn, direction)
 	case "play_count":
@@ -960,6 +963,18 @@ func (qb *PerformerStore) UpdateImages(ctx context.Context, performerID int, ima
 // order (position 0 == primary). Backs the multi-image collection.
 func (qb *PerformerStore) GetImageChecksums(ctx context.Context, performerID int) ([]string, error) {
 	return performersImagesBlobTableMgr.get(ctx, performerID)
+}
+
+// GetImageCount returns the number of images in the performer's headshot
+// collection (performer_images). Backs the image_collection_count field. The
+// collection is small, so counting the ordered checksums is cheap and reuses
+// the one tested read path (the sort uses a SQL COUNT — see getPerformerSort).
+func (qb *PerformerStore) GetImageCount(ctx context.Context, performerID int) (int, error) {
+	checksums, err := qb.GetImageChecksums(ctx, performerID)
+	if err != nil {
+		return 0, err
+	}
+	return len(checksums), nil
 }
 
 // GetImageByIndex returns the raw bytes of the performer's image at the given

@@ -57,6 +57,8 @@ A change usually flows through these layers, top to bottom:
 - `src/core/` — GraphQL operations per entity (`performers.ts`, …) + the generated Apollo client `src/core/generated-graphql.ts`.
 - `src/hooks/`, `src/models/`, `src/utils/`.
 
+**Worked example through all of these layers** (schema → resolver → sqlite → mocks → codegen → UI badge + sortable column): [`docs/recipes/add-a-field.md`](docs/recipes/add-a-field.md).
+
 ## GraphQL codegen — the #1 thing that breaks the build
 
 The schema drives **two** generators. After editing `graphql/schema/**`:
@@ -90,7 +92,7 @@ The dev instance builds its DB at the current `appSchemaVersion`, so after addin
 ## Your custom features (extend, don't reinvent)
 
 This build diverges from stock Stash here — know these before touching related code:
-- **Performer multi-image collection** — migration 86; schema `Performer.images: [PerformerImage!]!` and `PerformerCreateInput.images`; multi-image edit tray in the UI. *(Known bug: the `image_count` resolver returns 0.)*
+- **Performer multi-image collection** — migration 86; schema `Performer.images: [PerformerImage!]!` and `PerformerCreateInput.images`; multi-image edit tray in the UI. Collection size is surfaced as `Performer.image_collection_count` (card badge + sortable "Photos" column). *Beware the two similarly-named tables:* `performer_images` (singular) is **this** headshot collection; `performers_images` (plural) is the stock join of performers↔library-images that backs `image_count` — they are unrelated.
 - **Stash-box metadata import** — import full metadata from a manual stash-box scene search.
 - **Decimal rating input** — idiomatic decimal rating control.
 - **Fork version badge** — version indicator in the navbar utility area.
