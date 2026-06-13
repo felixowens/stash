@@ -152,6 +152,200 @@
   }
 }
 
+// ---------------------------------------------------------------------------
+// Card flip — hover reveals the "feature image" (images[1]). Top-rated
+// performers (rating100 >= 80) additionally wear a holographic "foil" skin:
+// an always-on iridescent foil edge that flows round the border (the resting
+// "this card is rare" cue), plus a cursor-tracked sheen on hover.
+// ---------------------------------------------------------------------------
+
+// Animatable angle for the foil edge's conic gradient. Animating this (rather
+// than rotating the element) flows the rainbow round the border while leaving
+// the mask — and the photo — perfectly still.
+@property --foilspin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes performer-foil-flow {
+  to {
+    --foilspin: 360deg;
+  }
+}
+
+.performer-card-flip {
+  position: relative;
+  width: 100%;
+  perspective: 1100px;
+
+  // The holo cursor-tilt lives on its own wrapper, so pointer-move updates only
+  // re-animate this tiny transform — never the flip below. That keeps the flip
+  // feeling identical to the plain cards.
+  &__tilt {
+    position: relative;
+    width: 100%;
+    transform-style: preserve-3d;
+  }
+
+  &__inner {
+    position: relative;
+    width: 100%;
+    transform-style: preserve-3d;
+  }
+
+  &__face {
+    border-radius: inherit;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+
+    &--front {
+      position: relative; // drives the inner's height via its 2/3 aspect-ratio
+      display: block;
+    }
+
+    &--back {
+      position: absolute;
+      inset: 0;
+      height: 100%;
+      width: 100%;
+      transform: rotateY(180deg);
+    }
+  }
+
+  // --- the flip: pure-CSS :hover, identical timing for every flippable card
+  //     (plain or holo) so they all feel the same ---
+  &--flippable {
+    .performer-card-flip__inner {
+      transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.25, 1);
+    }
+
+    &:hover .performer-card-flip__inner {
+      transform: rotateY(180deg);
+    }
+  }
+
+  // --- holographic foil card (S tier) ---
+  &--holo {
+    // cursor-tracked tilt (--rx/--ry from JS) — fast and decoupled from the flip
+    .performer-card-flip__tilt {
+      transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+      transition: transform 0.12s ease-out;
+    }
+
+    // sheen — a glossy light-streak that slides across with the cursor (--mx).
+    // Hidden at rest (the gold frame is the resting cue); screen blend so it
+    // glints off the photo instead of washing it out.
+    .performer-card-flip__sheen {
+      background-image: linear-gradient(
+          102deg,
+          transparent 41%,
+          rgba(255, 255, 255, 0.4) 48%,
+          rgba(255, 255, 255, 0.85) 50%,
+          rgba(255, 255, 255, 0.4) 52%,
+          transparent 59%
+        ),
+        linear-gradient(
+          115deg,
+          rgba(99, 210, 255, 0.14),
+          rgba(180, 130, 255, 0.14) 38%,
+          rgba(255, 120, 170, 0.14) 68%,
+          rgba(255, 210, 120, 0.14)
+        );
+      background-position: var(--mx, 50%) 0, 0 0;
+      background-repeat: no-repeat;
+      background-size: 260% 100%, 100% 100%;
+      border-radius: inherit;
+      inset: 0;
+      mix-blend-mode: screen;
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      transition: opacity 0.3s ease;
+      z-index: 2;
+    }
+
+    // foil edge — an opaque iridescent ring confined to the border; the conic
+    // angle flows via --foilspin so the rainbow drifts round the edge while the
+    // photo stays untouched. This is the resting "rare card" cue: always on,
+    // brightening on hover. (Opaque, not screen-blended — that's what keeps it
+    // crisp over light photo edges instead of washing out.)
+    .performer-card-flip__rim {
+      background: conic-gradient(
+        from var(--foilspin, 0deg),
+        #46e5d6,
+        #8b5cf6,
+        #ec4899,
+        #f6c453,
+        #6bff9e,
+        #46e5d6
+      );
+      border-radius: inherit;
+      filter: saturate(1.35) drop-shadow(0 0 6px rgba(139, 92, 246, 0.55));
+      inset: 0;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude;
+      -webkit-mask: linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      opacity: 0.9;
+      padding: 3px;
+      pointer-events: none;
+      position: absolute;
+      transition: opacity 0.3s ease, filter 0.3s ease;
+      z-index: 4;
+      animation: performer-foil-flow 9s linear infinite;
+    }
+
+    &:hover {
+      .performer-card-flip__sheen {
+        opacity: 1;
+      }
+
+      // foil edge brightens & blooms a little on hover
+      .performer-card-flip__rim {
+        opacity: 1;
+        filter: saturate(1.5) drop-shadow(0 0 10px rgba(139, 92, 246, 0.7));
+      }
+    }
+  }
+}
+
+// Respect reduced motion: drop the 3D flip/tilt and the moving sheen; the
+// feature image crossfades in, and the foil edge stays (frozen, not flowing).
+@media (prefers-reduced-motion: reduce) {
+  .performer-card-flip__tilt,
+  .performer-card-flip__inner {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .performer-card-flip__face {
+    backface-visibility: visible;
+    -webkit-backface-visibility: visible;
+  }
+
+  .performer-card-flip__face--back {
+    opacity: 0;
+    transform: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .performer-card-flip--flippable:hover .performer-card-flip__face--back {
+    opacity: 1;
+  }
+
+  // keep the foil edge (it's the rarity cue) but freeze its flow; the cursor
+  // sheen is a pure hover-motion effect, so drop it.
+  .performer-card-flip__sheen {
+    display: none;
+  }
+
+  .performer-card-flip__rim {
+    animation: none;
+  }
+}
+
 .card {
   &.performer-card {
     padding: 0 0 1rem 0;

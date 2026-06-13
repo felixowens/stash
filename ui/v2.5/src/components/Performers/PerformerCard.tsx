@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef } from "react";
+import cx from "classnames";
 import { Link } from "react-router-dom";
 import { useIntl } from "react-intl";
 import * as GQL from "src/core/generated-graphql";
@@ -333,18 +334,134 @@ const PerformerCardDetails: React.FC<IPerformerCardProps> = PatchComponent(
   }
 );
 
+// Top-rated performers earn a holographic "foil" card, like a rare trading
+// card. rating100 is 0-100; >= 80 (8.0+ on the decimal scale) is the S tier.
+const HOLO_RATING_THRESHOLD = 80;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+interface IPerformerCardFlip {
+  name: string;
+  frontUrl: string;
+  // The "feature image" revealed on the back. Undefined ⇒ nothing to flip to.
+  backUrl?: string;
+  // Whether this card wears the holographic foil treatment.
+  holo: boolean;
+}
+
+// The flippable image. The flip is pure-CSS :hover for *every* card, so it
+// feels identical everywhere — no React state in the hover path. Holo cards
+// layer a cursor-tracked 3D tilt + sheen on top; the tilt lives on its own
+// wrapper element so frequent pointer-move updates never re-trigger (and slow)
+// the flip's transition. Both degrade to a crossfade under
+// prefers-reduced-motion (handled in CSS).
+const PerformerCardFlip: React.FC<IPerformerCardFlip> = ({
+  name,
+  frontUrl,
+  backUrl,
+  holo,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const flippable = !!backUrl;
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const el = ref.current;
+    if (!el || prefersReducedMotion()) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    el.style.setProperty("--rx", `${((0.5 - py) * 16).toFixed(2)}deg`);
+    el.style.setProperty("--ry", `${((px - 0.5) * 16).toFixed(2)}deg`);
+    el.style.setProperty("--mx", `${(px * 100).toFixed(1)}%`);
+    el.style.setProperty("--my", `${(py * 100).toFixed(1)}%`);
+  }
+
+  function resetFx() {
+    const el = ref.current;
+    if (!el) return;
+    // recentre tilt + sheen so the next hover doesn't jump from the last spot
+    el.style.setProperty("--rx", "0deg");
+    el.style.setProperty("--ry", "0deg");
+    el.style.setProperty("--mx", "50%");
+    el.style.setProperty("--my", "35%");
+  }
+
+  // Only holo cards need JS, for the tilt + sheen — the flip is CSS :hover.
+  const holoHandlers = holo
+    ? { onPointerMove: handlePointerMove, onPointerLeave: resetFx }
+    : {};
+
+  return (
+    <div
+      ref={ref}
+      className={cx("performer-card-flip", {
+        "performer-card-flip--holo": holo,
+        "performer-card-flip--flippable": flippable,
+      })}
+      {...holoHandlers}
+    >
+      <div className="performer-card-flip__tilt">
+        <div className="performer-card-flip__inner">
+          <img
+            loading="lazy"
+            className="performer-card-image performer-card-flip__face performer-card-flip__face--front"
+            alt={name}
+            src={frontUrl}
+          />
+          {flippable && (
+            <img
+              loading="lazy"
+              aria-hidden
+              className="performer-card-image performer-card-flip__face performer-card-flip__face--back"
+              alt=""
+              src={backUrl}
+            />
+          )}
+        </div>
+      </div>
+      {holo && <div className="performer-card-flip__sheen" aria-hidden />}
+      {holo && <div className="performer-card-flip__rim" aria-hidden />}
+    </div>
+  );
+};
+
 const PerformerCardImage: React.FC<IPerformerCardProps> = PatchComponent(
   "PerformerCard.Image",
   ({ performer }) => {
-    return (
-      <>
+    const holo = (performer.rating100 ?? 0) >= HOLO_RATING_THRESHOLD;
+
+    // index 0 is the primary (mirrors image_path); index 1 is the feature image
+    // we flip to. Gate on the same collection-count check as the photos badge.
+    const backUrl =
+      (performer.image_collection_count ?? 0) > 1
+        ? performer.images?.find((img) => img.index === 1)?.url
+        : undefined;
+
+    // Plain card: no rarity skin and nothing to flip to — render as before.
+    if (!holo && !backUrl) {
+      return (
         <img
           loading="lazy"
           className="performer-card-image"
           alt={performer.name ?? ""}
           src={performer.image_path ?? ""}
         />
-      </>
+      );
+    }
+
+    return (
+      <PerformerCardFlip
+        name={performer.name ?? ""}
+        frontUrl={performer.image_path ?? ""}
+        backUrl={backUrl}
+        holo={holo}
+      />
     );
   }
 );

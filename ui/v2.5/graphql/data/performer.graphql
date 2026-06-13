@@ -24,6 +24,10 @@ fragment PerformerData on Performer {
   scene_count
   image_count
   image_collection_count
+  images {
+    index
+    url
+  }
   gallery_count
   group_count
   performer_count
