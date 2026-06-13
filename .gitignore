@@ -67,3 +67,6 @@ dist
 
 # dev-instance.sh throwaway state
 /.dev
+
+# Local-only assets (real images for dev/testing — not for the repo)
+/assets/

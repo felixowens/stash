@@ -13,6 +13,9 @@ Scenarios let you boot into a *specific* state to verify against:
     minimal      a handful of each — fast boot for a quick visual check
     empty        nothing — verify empty-state UI / a clean library
     multi-image  fewer performers, but 2-4 images each — exercise the collection
+    faces        like multi-image, but real photos from assets/face/ (gitignored)
+                 with ratings skewed high — to judge the holographic foil card
+                 on actual headshots
     edge         gnarly names (unicode, emoji, very long, quotes, XSS probe) to
                  catch rendering/escaping bugs
 
@@ -35,6 +38,7 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORDS = os.path.join(HERE, "test_db_generator")
+ASSETS = os.path.join(os.path.dirname(HERE), "assets")
 GENDERS = ["FEMALE", "MALE", "NON_BINARY", "TRANSGENDER_FEMALE"]
 COUNTRIES = ["US", "GB", "DE", "FR", "JP", "BR", "CA", "AU", "SE", "CZ"]
 
@@ -44,6 +48,8 @@ SCENARIOS = {
     "minimal":     {"performers": 6,  "studios": 3,  "tags": 5},
     "empty":       {"performers": 0,  "studios": 0,  "tags": 0},
     "multi-image": {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4)},
+    "faces":       {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4),
+                    "real_faces": True, "rating_range": (60, 100)},
     "edge":        {"performers": 0,  "studios": 4,  "tags": 6,  "edge": True},
 }
 
@@ -112,6 +118,37 @@ def load_words(name, fallback):
         return fallback
 
 
+# Real face photos live in assets/face/ (gitignored) and back the `faces`
+# scenario, so the holographic foil card can be judged on actual headshots.
+_FACE_MIMES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+
+
+def face_image_paths():
+    """Paths of usable images in assets/face/, sorted. [] if the dir is absent."""
+    face_dir = os.path.join(ASSETS, "face")
+    try:
+        names = sorted(os.listdir(face_dir))
+    except OSError:
+        return []
+    return [
+        os.path.join(face_dir, n)
+        for n in names
+        if os.path.splitext(n)[1].lower() in _FACE_MIMES
+    ]
+
+
+def face_data_url(path):
+    """Read one face image and encode it as a base64 data URL."""
+    mime = _FACE_MIMES[os.path.splitext(path)[1].lower()]
+    with open(path, "rb") as fh:
+        return f"data:{mime};base64," + base64.b64encode(fh.read()).decode()
+
+
 def performer_names(rng, count, edge, female, male, surname):
     """Return a list of (name, gender) specs to create."""
     specs = []
@@ -144,6 +181,8 @@ def main():
     n_tag = args.tags if args.tags is not None else sc["tags"]
     img_lo, img_hi = sc.get("images", (1, 3))
     edge = sc.get("edge", False)
+    real_faces = sc.get("real_faces", False)
+    rating_lo, rating_hi = sc.get("rating_range", (30, 100))
 
     female = load_words("female.txt", ["Ava", "Mia", "Zoe"])
     male = load_words("male.txt", ["Max", "Leo", "Sam"])
@@ -157,6 +196,8 @@ def main():
 
     if args.dry_run:
         print(f"  would create: {len(specs)} performers, {n_studio} studios, {n_tag} tags")
+        if real_faces:
+            print(f"  real faces in assets/face/: {len(face_image_paths())}")
         for name, gender in specs[:8]:
             print(f"    - {name!r} [{gender}]")
         if len(specs) > 8:
@@ -198,22 +239,37 @@ def main():
         studio_ids.append(data["studioCreate"]["id"])
     print(f"  studios:    {len(studio_ids)}")
 
-    # Performers — with the fork's multi-image `images` collection
+    # Performers — with the fork's multi-image `images` collection. The `faces`
+    # scenario fills that collection with real photos from assets/face/.
+    face_paths = face_image_paths() if real_faces else []
+    use_faces = real_faces and bool(face_paths)
+    if real_faces and not face_paths:
+        print("  ! no images in assets/face/ — falling back to colour blocks",
+              file=sys.stderr)
+    if use_faces:
+        print(f"  faces:      {len(face_paths)} real images from assets/face/")
+
     made = 0
     for name, gender in specs:
         n_imgs = rng.randint(img_lo, img_hi)
-        images = [
-            png_data_url(
-                (rng.randint(40, 230), rng.randint(40, 230), rng.randint(40, 230))
-            )
-            for _ in range(n_imgs)
-        ]
+        if use_faces:
+            images = [
+                face_data_url(p)
+                for p in rng.sample(face_paths, k=min(n_imgs, len(face_paths)))
+            ]
+        else:
+            images = [
+                png_data_url(
+                    (rng.randint(40, 230), rng.randint(40, 230), rng.randint(40, 230))
+                )
+                for _ in range(n_imgs)
+            ]
         i = {
             "name": name,
             "gender": gender,
             "country": rng.choice(COUNTRIES),
             "birthdate": f"{rng.randint(1980, 2003)}-{rng.randint(1,12):02d}-{rng.randint(1,28):02d}",
-            "rating100": rng.choice([None, rng.randint(30, 100)]),
+            "rating100": rng.choice([None, rng.randint(rating_lo, rating_hi)]),
             "favorite": rng.random() < 0.25,
             "tag_ids": rng.sample(tag_ids, k=min(len(tag_ids), rng.randint(0, 4))) if tag_ids else [],
             "images": images,
