@@ -5,7 +5,7 @@ import { faScissors } from "@fortawesome/free-solid-svg-icons";
 import * as GQL from "src/core/generated-graphql";
 import { Icon } from "../../Shared/Icon";
 import { ClipCardGrid } from "../../Clips/ClipCardGrid";
-import { ClipCreateDock } from "../../Clips/ClipDetails/ClipCreateDock";
+import { ClipCreateModal } from "../../Clips/ClipDetails/ClipCreateModal";
 
 interface ISceneClipsPanelProps {
   scene: GQL.SceneDataFragment;
@@ -19,15 +19,15 @@ export const SceneClipsPanel: React.FC<ISceneClipsPanelProps> = ({ scene }) => {
 
   return (
     <div className="scene-clips-panel">
-      {creating ? (
-        <ClipCreateDock scene={scene} onClose={() => setCreating(false)} />
-      ) : (
-        <div className="clips-panel-header">
-          <Button variant="secondary" onClick={() => setCreating(true)}>
-            <Icon icon={faScissors} className="mr-2" />
-            <FormattedMessage id="actions.create_clip" />
-          </Button>
-        </div>
+      <div className="clips-panel-header">
+        <Button variant="secondary" onClick={() => setCreating(true)}>
+          <Icon icon={faScissors} className="mr-2" />
+          <FormattedMessage id="actions.create_clip" />
+        </Button>
+      </div>
+
+      {creating && (
+        <ClipCreateModal scene={scene} onClose={() => setCreating(false)} />
       )}
 
       {scene.clips.length === 0 ? (

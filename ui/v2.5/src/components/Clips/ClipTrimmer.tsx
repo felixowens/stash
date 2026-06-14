@@ -27,6 +27,8 @@ interface IClipTrimmerProps {
   outSeconds: number;
   onChange: (inS: number, outS: number) => void;
   clock: ISceneClock;
+  // render an evenly-spaced time axis under the track (worth it on a wide track)
+  ticks?: boolean;
 }
 
 // The bottom-dock trim track: filmstrip + draggable in/out handles + live
@@ -39,6 +41,7 @@ export const ClipTrimmer: React.FC<IClipTrimmerProps> = ({
   outSeconds,
   onChange,
   clock,
+  ticks = false,
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [looping, setLooping] = useState(false);
@@ -190,6 +193,14 @@ export const ClipTrimmer: React.FC<IClipTrimmerProps> = ({
         </div>
         <div className="clip-trim__playhead" style={{ left: `${headPct}%` }} />
       </div>
+
+      {ticks && (
+        <div className="clip-trim__axis">
+          {Array.from({ length: 6 }, (_, i) => (
+            <span key={i}>{TextUtils.secondsToTimestamp((dur * i) / 5)}</span>
+          ))}
+        </div>
+      )}
 
       <div className="clip-trim__controls">
         <button className="clip-trim__btn" onClick={setIn} type="button">

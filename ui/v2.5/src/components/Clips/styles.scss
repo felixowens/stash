@@ -976,3 +976,240 @@ $clip-glass: rgba(10, 14, 18, 0.62);
     grid-column: 1 / -1;
   }
 }
+
+// ============================================================
+// Create-clip theater (full-screen modal: stage + bottom dock)
+// ============================================================
+.clip-create-modal {
+  &__dialog {
+    height: 100vh;
+    margin: 0;
+    max-width: 100vw;
+    width: 100vw;
+  }
+
+  &__content {
+    background: #0e151b;
+    border: 0;
+    border-radius: 0;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+.clip-theater {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.clip-theater__head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 22px 12px;
+}
+
+.clip-theater__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.clip-theater__title {
+  align-items: center;
+  color: #f5f8fa;
+  display: flex;
+  font-size: 19px;
+  font-weight: 800;
+  gap: 10px;
+  letter-spacing: 0.2px;
+  margin: 0;
+
+  svg {
+    color: $clip-accent-b;
+    margin: 0;
+  }
+}
+
+.clip-theater__from {
+  color: #9fb0bd;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-theater__hint {
+  align-items: center;
+  color: #7e909e;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+
+  kbd {
+    background: #1c262f;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 5px;
+    color: #cdd7df;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+  }
+}
+
+.clip-theater__close.minimal {
+  color: #abb9c4;
+  flex: 0 0 auto;
+  font-size: 20px;
+
+  svg {
+    margin: 0;
+  }
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+// ---- the stage: source scene streams in, centered ----
+.clip-theater__stage {
+  align-items: center;
+  background: radial-gradient(120% 90% at 50% 0%, #0c1218, #06090c 70%);
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.clip-theater__video {
+  background: #000;
+  border-radius: 10px;
+  box-shadow: 0 26px 70px -20px rgba(0, 0, 0, 0.85);
+  cursor: pointer;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.clip-theater__badge {
+  align-items: center;
+  backdrop-filter: blur(7px);
+  background: $clip-glass;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #eaf0f5;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  left: 16px;
+  letter-spacing: 0.3px;
+  padding: 5px 10px;
+  position: absolute;
+  top: 14px;
+  z-index: 3;
+}
+
+.clip-theater__livedot {
+  background: $clip-accent-b;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(123, 97, 255, 0.9);
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.clip-theater__source {
+  align-items: center;
+  backdrop-filter: blur(7px);
+  background: $clip-glass;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #cdd7df;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 7px;
+  max-width: 40%;
+  overflow: hidden;
+  padding: 5px 10px;
+  position: absolute;
+  right: 16px;
+  text-overflow: ellipsis;
+  top: 14px;
+  white-space: nowrap;
+  z-index: 3;
+
+  svg {
+    color: $clip-accent-b;
+    margin: 0;
+  }
+}
+
+.clip-theater__play {
+  align-items: center;
+  appearance: none;
+  backdrop-filter: blur(4px);
+  background: rgba(123, 97, 255, 0.32);
+  border: 1.5px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  height: 72px;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  z-index: 4;
+
+  svg {
+    height: 26px;
+    margin-left: 4px;
+    width: 26px;
+  }
+
+  &:hover {
+    background: rgba(123, 97, 255, 0.5);
+  }
+}
+
+// ---- the bottom dock: full-width trim, no card framing ----
+.clip-create-dock--theater {
+  background: rgba(13, 19, 25, 0.96);
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 14px 22px 18px;
+
+  // the whole point of the theater: a tall, wide trim track
+  .clip-trim__track {
+    height: 92px;
+  }
+
+  .clip-filmstrip {
+    opacity: 0.6;
+  }
+}
+
+.clip-trim__axis {
+  color: #7e909e;
+  display: flex;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 0 1px;
+}
