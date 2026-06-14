@@ -57,6 +57,19 @@ func (rs clipRoutes) streamTranscode(w http.ResponseWriter, r *http.Request, str
 	clip := r.Context().Value(clipKey).(*models.Clip)
 	scene, _ := r.Context().Value(sceneKey).(*models.Scene)
 
+	// Fast path: a pre-rendered, full-range mp4 may already exist (generated in
+	// the background on clip create/update). Serve it directly — a plain static
+	// file with HTTP range support — instead of re-transcoding the source scene
+	// live on every play. Only mp4 is pre-rendered; .webm falls through to a
+	// live transcode. This also lets a clip play even if live transcoding is off.
+	if streamType.MimeType == ffmpeg.StreamTypeMP4.MimeType {
+		streamPath := manager.GetInstance().Paths.Clips.GetStreamPath(clip.ID)
+		if exists, _ := fsutil.FileExists(streamPath); exists {
+			utils.ServeStaticFile(w, r, streamPath)
+			return
+		}
+	}
+
 	streamManager := manager.GetInstance().StreamManager
 	if streamManager == nil {
 		http.Error(w, "Live transcoding disabled", http.StatusServiceUnavailable)

@@ -82,16 +82,24 @@ func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput
 		return nil, err
 	}
 
-	// enqueue generation of the clip's preview + screenshot (best-effort — a
-	// missing ffmpeg or disabled generation must not fail clip creation)
-	if _, err := manager.GetInstance().Generate(ctx, manager.GenerateMetadataInput{
-		ClipIDs:    []string{strconv.Itoa(newClip.ID)},
-		SceneClips: true,
-	}); err != nil {
-		logger.Warnf("error enqueuing clip generation for clip %d: %v", newClip.ID, err)
-	}
+	// render the clip's stream + preview + screenshot in the background
+	// (best-effort — a missing ffmpeg or disabled generation must not fail
+	// clip creation)
+	enqueueClipGeneration(ctx, newClip.ID)
 
 	return r.getClip(ctx, newClip.ID)
+}
+
+// enqueueClipGeneration kicks off background generation of a clip's pre-rendered
+// stream, hover preview and poster screenshot. Best-effort: a missing ffmpeg or
+// disabled generation must not fail the originating mutation.
+func enqueueClipGeneration(ctx context.Context, clipID int) {
+	if _, err := manager.GetInstance().Generate(ctx, manager.GenerateMetadataInput{
+		ClipIDs:    []string{strconv.Itoa(clipID)},
+		SceneClips: true,
+	}); err != nil {
+		logger.Warnf("error enqueuing clip generation for clip %d: %v", clipID, err)
+	}
 }
 
 // used to refetch clip after mutations
@@ -155,6 +163,15 @@ func (r *mutationResolver) ClipUpdate(ctx context.Context, input ClipUpdateInput
 		return err
 	}); err != nil {
 		return nil, err
+	}
+
+	// A changed range (or re-pointed source scene) invalidates the pre-rendered
+	// stream + poster. Drop the stale files so playback immediately falls back
+	// to a live transcode of the corrected range, then regenerate in the
+	// background.
+	if partial.StartSeconds.Set || partial.EndSeconds.Set || partial.SceneID.Set {
+		deleteGeneratedClipFiles(clipID)
+		enqueueClipGeneration(ctx, clipID)
 	}
 
 	return ret, nil
@@ -230,6 +247,7 @@ func (r *mutationResolver) ClipDestroy(ctx context.Context, input ClipDestroyInp
 func deleteGeneratedClipFiles(clipID int) {
 	p := manager.GetInstance().Paths.Clips
 	for _, path := range []string{
+		p.GetStreamPath(clipID),
 		p.GetVideoPreviewPath(clipID),
 		p.GetScreenshotPath(clipID),
 		p.GetWebpPreviewPath(clipID),

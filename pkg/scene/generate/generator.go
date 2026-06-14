@@ -36,6 +36,7 @@ type MarkerPaths interface {
 type ClipPaths interface {
 	Paths
 
+	GetStreamPath(clipID int) string
 	GetVideoPreviewPath(clipID int) string
 	GetWebpPreviewPath(clipID int) string
 	GetScreenshotPath(clipID int) string

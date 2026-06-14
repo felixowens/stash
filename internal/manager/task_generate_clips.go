@@ -106,6 +106,13 @@ func (t *GenerateClipsTask) generateClip(videoFile *models.VideoFile, clip *mode
 
 	g := t.generator
 
+	// the pre-rendered full-range stream is the heavy step; do it first so the
+	// clip becomes fast to play as soon as possible
+	if err := g.ClipStreamVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds); err != nil {
+		logger.Errorf("[generator] failed to generate clip stream video: %v", err)
+		logErrorOutput(err)
+	}
+
 	if err := g.ClipPreviewVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, instance.Config.GetPreviewAudio()); err != nil {
 		logger.Errorf("[generator] failed to generate clip video preview: %v", err)
 		logErrorOutput(err)
@@ -139,8 +146,9 @@ func (t *GenerateClipsTask) clipsNeeded(ctx context.Context) int {
 }
 
 func (t *GenerateClipsTask) clipExists(clipID int) bool {
+	streamExists, _ := fsutil.FileExists(instance.Paths.Clips.GetStreamPath(clipID))
 	videoExists, _ := fsutil.FileExists(instance.Paths.Clips.GetVideoPreviewPath(clipID))
 	screenshotExists, _ := fsutil.FileExists(instance.Paths.Clips.GetScreenshotPath(clipID))
 
-	return videoExists && screenshotExists
+	return streamExists && videoExists && screenshotExists
 }

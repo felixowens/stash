@@ -20,6 +20,14 @@ func newClipPaths(p Paths) *clipPaths {
 	return &cp
 }
 
+// GetStreamPath is the pre-rendered, full-range playback file for a clip: a
+// frame-accurate, full-resolution encode of [start, end] written once in the
+// background. When present it's served directly (a plain static file with range
+// support) instead of re-transcoding the source scene live on every play.
+func (cp *clipPaths) GetStreamPath(clipID int) string {
+	return filepath.Join(cp.Clips, strconv.Itoa(clipID)+"_stream.mp4")
+}
+
 func (cp *clipPaths) GetVideoPreviewPath(clipID int) string {
 	return filepath.Join(cp.Clips, strconv.Itoa(clipID)+".mp4")
 }
