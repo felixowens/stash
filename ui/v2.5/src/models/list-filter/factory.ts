@@ -1,5 +1,6 @@
 import { FilterMode } from "src/core/generated-graphql";
 import { ListFilterOptions } from "./filter-options";
+import { ClipListFilterOptions } from "./clips";
 import { GalleryListFilterOptions } from "./galleries";
 import { ImageListFilterOptions } from "./images";
 import { GroupListFilterOptions } from "./groups";
@@ -19,6 +20,8 @@ export function getFilterOptions(mode: FilterMode): ListFilterOptions {
       return StudioListFilterOptions;
     case FilterMode.Galleries:
       return GalleryListFilterOptions;
+    case FilterMode.Clips:
+      return ClipListFilterOptions;
     case FilterMode.SceneMarkers:
       return SceneMarkerListFilterOptions;
     case FilterMode.Movies:

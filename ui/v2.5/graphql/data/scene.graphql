@@ -45,6 +45,10 @@ fragment SceneData on Scene {
     ...SceneMarkerData
   }
 
+  clips {
+    ...SlimClipData
+  }
+
   galleries {
     ...SlimGalleryData
   }

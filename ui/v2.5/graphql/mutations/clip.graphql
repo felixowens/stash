@@ -1,0 +1,81 @@
+mutation ClipCreate($input: ClipCreateInput!) {
+  clipCreate(input: $input) {
+    ...ClipData
+  }
+}
+
+mutation ClipUpdate($input: ClipUpdateInput!) {
+  clipUpdate(input: $input) {
+    ...ClipData
+  }
+}
+
+mutation BulkClipUpdate($input: BulkClipUpdateInput!) {
+  bulkClipUpdate(input: $input) {
+    ...ClipData
+  }
+}
+
+mutation ClipDestroy($input: ClipDestroyInput!) {
+  clipDestroy(input: $input)
+}
+
+mutation ClipsDestroy($ids: [ID!]!) {
+  clipsDestroy(ids: $ids)
+}
+
+mutation ClipSaveActivity($id: ID!, $resume_time: Float, $playDuration: Float) {
+  clipSaveActivity(
+    id: $id
+    resume_time: $resume_time
+    playDuration: $playDuration
+  )
+}
+
+mutation ClipResetActivity(
+  $id: ID!
+  $reset_resume: Boolean
+  $reset_duration: Boolean
+) {
+  clipResetActivity(
+    id: $id
+    reset_resume: $reset_resume
+    reset_duration: $reset_duration
+  )
+}
+
+mutation ClipAddPlay($id: ID!, $times: [Timestamp!]) {
+  clipAddPlay(id: $id, times: $times) {
+    count
+    history
+  }
+}
+
+mutation ClipDeletePlay($id: ID!, $times: [Timestamp!]) {
+  clipDeletePlay(id: $id, times: $times) {
+    count
+    history
+  }
+}
+
+mutation ClipResetPlayCount($id: ID!) {
+  clipResetPlayCount(id: $id)
+}
+
+mutation ClipAddO($id: ID!, $times: [Timestamp!]) {
+  clipAddO(id: $id, times: $times) {
+    count
+    history
+  }
+}
+
+mutation ClipDeleteO($id: ID!, $times: [Timestamp!]) {
+  clipDeleteO(id: $id, times: $times) {
+    count
+    history
+  }
+}
+
+mutation ClipResetO($id: ID!) {
+  clipResetO(id: $id)
+}

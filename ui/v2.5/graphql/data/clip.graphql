@@ -1,0 +1,96 @@
+fragment SlimClipData on Clip {
+  id
+  title
+  details
+  date
+  rating100
+  organized
+  start_seconds
+  end_seconds
+  o_counter
+  play_count
+  scene {
+    id
+    title
+  }
+  paths {
+    stream
+    preview
+    screenshot
+  }
+  studio {
+    id
+    name
+    image_path
+  }
+  tags {
+    id
+    name
+  }
+  performers {
+    id
+    name
+    gender
+    favorite
+    image_path
+  }
+  created_at
+  updated_at
+}
+
+fragment ClipData on Clip {
+  id
+  title
+  details
+  date
+  rating100
+  organized
+  start_seconds
+  end_seconds
+  o_counter
+  last_played_at
+  resume_time
+  play_duration
+  play_count
+  play_history
+  o_history
+
+  scene {
+    id
+    title
+    date
+  }
+
+  paths {
+    stream
+    preview
+    screenshot
+  }
+
+  studio {
+    ...SlimStudioData
+  }
+  tags {
+    ...SlimTagData
+  }
+  performers {
+    ...PerformerData
+  }
+
+  created_at
+  updated_at
+}
+
+fragment SelectClipData on Clip {
+  id
+  title
+  start_seconds
+  end_seconds
+  scene {
+    id
+    title
+  }
+  paths {
+    screenshot
+  }
+}

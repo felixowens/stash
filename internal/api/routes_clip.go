@@ -99,6 +99,14 @@ func (rs clipRoutes) Preview(w http.ResponseWriter, r *http.Request) {
 	clip := r.Context().Value(clipKey).(*models.Clip)
 	filepath := manager.GetInstance().Paths.Clips.GetVideoPreviewPath(clip.ID)
 
+	// Preview generation is asynchronous; don't let the browser cache a 404
+	// from before the file exists, or it would never load the generated preview.
+	if exists, _ := fsutil.FileExists(filepath); !exists {
+		w.Header().Set("Cache-Control", "no-store")
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
 	utils.ServeStaticFile(w, r, filepath)
 }
 
@@ -106,11 +114,17 @@ func (rs clipRoutes) Screenshot(w http.ResponseWriter, r *http.Request) {
 	clip := r.Context().Value(clipKey).(*models.Clip)
 	filepath := manager.GetInstance().Paths.Clips.GetScreenshotPath(clip.ID)
 
-	// If the image doesn't exist, send the placeholder
+	// If the image doesn't exist, send the placeholder. Generation is
+	// asynchronous and the screenshot URL is cache-busted only on the clip's
+	// updated_at (which generation does not change). The shared static-content
+	// helpers mark any "?t="-tagged response as immutable for a year, which would
+	// pin the placeholder forever — so write it directly with no-store instead,
+	// ensuring the browser re-fetches the real screenshot once it lands.
 	exists, _ := fsutil.FileExists(filepath)
 	if !exists {
 		w.Header().Set("Content-Type", "image/png")
-		utils.ServeStaticContent(w, r, utils.PendingGenerateResource)
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(utils.PendingGenerateResource)
 		return
 	}
 

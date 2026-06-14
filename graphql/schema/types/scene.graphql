@@ -71,6 +71,8 @@ type Scene {
   files: [VideoFile!]!
   paths: ScenePathsType! # Resolver
   scene_markers: [SceneMarker!]!
+  "Virtual clips carved from this scene"
+  clips: [Clip!]!
   galleries: [Gallery!]!
   studio: Studio
   groups: [SceneGroup!]!

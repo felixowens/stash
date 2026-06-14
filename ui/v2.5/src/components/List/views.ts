@@ -1,4 +1,5 @@
 export enum View {
+  Clips = "clips",
   Galleries = "galleries",
   Images = "images",
   Scenes = "scenes",
@@ -34,4 +35,6 @@ export enum View {
   GroupScenes = "group_scenes",
   GroupSubGroups = "group_sub_groups",
   GroupPerformers = "group_performers",
+
+  SceneClips = "scene_clips",
 }

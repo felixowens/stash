@@ -625,6 +625,12 @@ export function setObjectFilter(
       }
       out.markers_filter = relatedFilterOutput as SceneMarkerFilterType;
       break;
+    case FilterMode.Clips:
+      // Clips have no reverse-filter plumbing on the related object types
+      // (no clips_filter / clip_count), so don't scope the sidebar option
+      // list. Selecting an option still filters clips forward via its
+      // criterion (ClipFilterType.studios/tags/performers).
+      break;
     default:
       throw new Error("Invalid filter mode");
   }

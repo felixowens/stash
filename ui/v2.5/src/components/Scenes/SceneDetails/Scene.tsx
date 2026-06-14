@@ -74,6 +74,7 @@ const ExternalPlayerButton = lazyComponent(
 
 const QueueViewer = lazyComponent(() => import("./QueueViewer"));
 const SceneMarkersPanel = lazyComponent(() => import("./SceneMarkersPanel"));
+const SceneClipsPanel = lazyComponent(() => import("./SceneClipsPanel"));
 const SceneFileInfoPanel = lazyComponent(() => import("./SceneFileInfoPanel"));
 const SceneDetailPanel = lazyComponent(() => import("./SceneDetailPanel"));
 const SceneHistoryPanel = lazyComponent(() => import("./SceneHistoryPanel"));
@@ -540,6 +541,11 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
                 <FormattedMessage id="markers" />
               </Nav.Link>
             </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="scene-clips-panel">
+                <FormattedMessage id="clips" />
+              </Nav.Link>
+            </Nav.Item>
             {scene.groups.length > 0 ? (
               <Nav.Item>
                 <Nav.Link eventKey="scene-group-panel">
@@ -614,6 +620,12 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
               onClickMarker={onClickMarker}
               onLoopMarker={onLoopMarker}
               isVisible={activeTabKey === "scene-markers-panel"}
+            />
+          </Tab.Pane>
+          <Tab.Pane eventKey="scene-clips-panel" mountOnEnter>
+            <SceneClipsPanel
+              scene={scene}
+              isVisible={activeTabKey === "scene-clips-panel"}
             />
           </Tab.Pane>
           <Tab.Pane eventKey="scene-group-panel">

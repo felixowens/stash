@@ -1785,6 +1785,251 @@ export const mutateGallerySetPrimaryFile = (id: string, fileID: string) =>
     },
   });
 
+// #region Clips
+
+export const useFindClips = (filter?: ListFilterModel) =>
+  GQL.useFindClipsQuery({
+    skip: filter === undefined,
+    variables: {
+      filter: filter?.makeFindFilter(),
+      clip_filter: filter?.makeFilter(),
+    },
+  });
+
+export const queryFindClips = (filter: ListFilterModel) =>
+  client.query<GQL.FindClipsQuery>({
+    query: GQL.FindClipsDocument,
+    variables: {
+      filter: filter.makeFindFilter(),
+      clip_filter: filter.makeFilter(),
+    },
+  });
+
+export const queryFindClipsForSelect = (filter: ListFilterModel) =>
+  client.query<GQL.FindClipsForSelectQuery>({
+    query: GQL.FindClipsForSelectDocument,
+    variables: {
+      filter: filter.makeFindFilter(),
+      clip_filter: filter.makeFilter(),
+    },
+  });
+
+export const queryFindClipsByIDForSelect = (clipIDs: string[]) =>
+  client.query<GQL.FindClipsForSelectQuery>({
+    query: GQL.FindClipsForSelectDocument,
+    variables: {
+      ids: clipIDs,
+    },
+  });
+
+export const useFindClip = (id: string) => {
+  const skip = id === "new" || id === "";
+  return GQL.useFindClipQuery({ variables: { id }, skip });
+};
+
+const clipMutationImpactedQueries = [
+  GQL.FindClipsDocument, // various filters
+];
+
+export const useClipCreate = () =>
+  GQL.useClipCreateMutation({
+    update(cache, result) {
+      if (!result.data?.clipCreate) return;
+
+      // refetch the source scene's clip list
+      cache.evict({
+        id: cache.identify({
+          __typename: "Scene",
+          id: result.data.clipCreate.scene.id,
+        }),
+        fieldName: "clips",
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipUpdate = () =>
+  GQL.useClipUpdateMutation({
+    update(cache, result) {
+      if (!result.data?.clipUpdate) return;
+
+      cache.evict({
+        id: cache.identify({
+          __typename: "Scene",
+          id: result.data.clipUpdate.scene.id,
+        }),
+        fieldName: "clips",
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useBulkClipUpdate = () =>
+  GQL.useBulkClipUpdateMutation({
+    update(cache, result) {
+      if (!result.data?.bulkClipUpdate) return;
+
+      evictTypeFields(cache, { Scene: ["clips"] });
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipDestroy = (input: GQL.ClipDestroyInput) =>
+  GQL.useClipDestroyMutation({
+    variables: { input },
+    update(cache, result) {
+      if (!result.data?.clipDestroy) return;
+
+      const obj = { __typename: "Clip", id: input.id };
+      deleteObject(cache, obj, GQL.FindClipDocument);
+
+      evictTypeFields(cache, { Scene: ["clips"] });
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipsDestroy = (input: GQL.ClipsDestroyMutationVariables) =>
+  GQL.useClipsDestroyMutation({
+    variables: input,
+    update(cache, result) {
+      if (!result.data?.clipsDestroy) return;
+
+      for (const id of input.ids) {
+        const obj = { __typename: "Clip", id };
+        deleteObject(cache, obj, GQL.FindClipDocument);
+      }
+
+      evictTypeFields(cache, { Scene: ["clips"] });
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipIncrementO = (id: string) =>
+  GQL.useClipAddOMutation({
+    variables: { id },
+    update(cache, result) {
+      const mutationResult = result.data?.clipAddO;
+      if (!mutationResult) return;
+
+      const { count, history } = mutationResult;
+      cache.modify({
+        id: cache.identify({ __typename: "Clip", id }),
+        fields: {
+          o_counter() {
+            return count;
+          },
+          o_history() {
+            return history;
+          },
+        },
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipDecrementO = (id: string) =>
+  GQL.useClipDeleteOMutation({
+    variables: { id },
+    update(cache, result) {
+      const mutationResult = result.data?.clipDeleteO;
+      if (!mutationResult) return;
+
+      const { count, history } = mutationResult;
+      cache.modify({
+        id: cache.identify({ __typename: "Clip", id }),
+        fields: {
+          o_counter() {
+            return count;
+          },
+          o_history() {
+            return history;
+          },
+        },
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipResetO = (id: string) =>
+  GQL.useClipResetOMutation({
+    variables: { id },
+    update(cache, result) {
+      const updatedOCount = result.data?.clipResetO;
+      if (updatedOCount === undefined) return;
+
+      cache.modify({
+        id: cache.identify({ __typename: "Clip", id }),
+        fields: {
+          o_counter() {
+            return updatedOCount;
+          },
+          o_history() {
+            const ret: string[] = [];
+            return ret;
+          },
+        },
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+export const useClipSaveActivity = () =>
+  GQL.useClipSaveActivityMutation({
+    update(cache, result, { variables }) {
+      if (!result.data?.clipSaveActivity || !variables) return;
+
+      const { id, playDuration, resume_time: resumeTime } = variables;
+
+      cache.modify({
+        id: cache.identify({ __typename: "Clip", id }),
+        fields: {
+          resume_time() {
+            return resumeTime ?? null;
+          },
+          play_duration(value) {
+            return (value ?? 0) + (playDuration ?? 0);
+          },
+        },
+      });
+    },
+  });
+
+export const useClipIncrementPlayCount = () =>
+  GQL.useClipAddPlayMutation({
+    update(cache, result, { variables }) {
+      const mutationResult = result.data?.clipAddPlay;
+      if (!mutationResult || !variables) return;
+
+      const { count, history } = mutationResult;
+      const { id } = variables;
+
+      cache.modify({
+        id: cache.identify({ __typename: "Clip", id }),
+        fields: {
+          play_count() {
+            return count;
+          },
+          last_played_at() {
+            // assume only one entry - or the first is the most recent
+            return history[0];
+          },
+          play_history() {
+            return history;
+          },
+        },
+      });
+
+      evictQueries(cache, clipMutationImpactedQueries);
+    },
+  });
+
+// #endregion
+
 const galleryChapterMutationImpactedTypeFields = {
   Gallery: ["chapters"],
 };

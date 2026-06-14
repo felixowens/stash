@@ -32,6 +32,7 @@
     "copy_to_clipboard": "Copy to clipboard",
     "create": "Create",
     "create_chapters": "Create Chapter",
+    "create_clip": "Create Clip",
     "create_entity": "Create {entityType}",
     "create_marker": "Create Marker",
     "create_new": "Create new",
@@ -936,6 +937,9 @@
     "studios": "{count, plural, one {Studio} other {Studios}}",
     "tags": "{count, plural, one {Tag} other {Tags}}"
   },
+  "clip": "Clip",
+  "clip_count": "Clip Count",
+  "clips": "Clips",
   "country": "Country",
   "cover_image": "Cover Image",
   "created_at": "Created At",
@@ -1543,6 +1547,7 @@
   },
   "stash_id": "Stash ID",
   "stash_id_count": "Stash ID Count",
+  "start_seconds": "Start Time",
   "stash_id_endpoint": "Stash ID Endpoint URL",
   "stash_ids": "Stash IDs",
   "stashbox_search": {

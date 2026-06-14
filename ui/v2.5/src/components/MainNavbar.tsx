@@ -32,6 +32,7 @@ import {
   faMapMarkerAlt,
   faPlayCircle,
   faQuestionCircle,
+  faScissors,
   faSignOutAlt,
   faTag,
   faTimes,
@@ -81,6 +82,10 @@ const messages = defineMessages({
   galleries: {
     id: "galleries",
     defaultMessage: "Galleries",
+  },
+  clips: {
+    id: "clips",
+    defaultMessage: "Clips",
   },
   sceneTagger: {
     id: "sceneTagger",
@@ -134,6 +139,13 @@ const allMenuItems: IMenuItem[] = [
     icon: faImages,
     hotkey: "g l",
     userCreatable: true,
+  },
+  {
+    name: "clips",
+    message: messages.clips,
+    href: "/clips",
+    icon: faScissors,
+    hotkey: "g c",
   },
   {
     name: "performers",
