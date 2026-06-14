@@ -11,7 +11,7 @@ import {
 import TextUtils from "src/utils/text";
 import { Icon } from "../Shared/Icon";
 import { SceneFilmstrip } from "./SceneFilmstrip";
-import { ISceneClock } from "./useSceneClock";
+import { ISceneClock } from "./useVideoClock";
 
 const MIN_LEN = 0.2;
 

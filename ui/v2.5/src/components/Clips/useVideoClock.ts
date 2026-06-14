@@ -1,11 +1,23 @@
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { ISceneClock } from "./useSceneClock";
+
+// A small play-clock the clip trimmer drives: read the playhead, seek, and loop
+// a range. The create theater owns its own <video>, so useVideoClock is the only
+// implementation — but the trimmer stays decoupled behind this interface.
+export interface ISceneClock {
+  currentTime: number;
+  duration: number;
+  playing: boolean;
+  seek: (t: number) => void;
+  play: () => void;
+  pause: () => void;
+  setLoop: (start: number, end: number) => void;
+  clearLoop: () => void;
+}
 
 // Drives a plain <video> element as an ISceneClock for the create-clip theater.
-// Unlike useSceneClock (which reaches into the videojs scene player), this owns
-// its own element — so looping is a timeupdate guard rather than the AB-loop
-// plugin, and there's no poll-until-ready dance. Same interface, so ClipTrimmer
-// and SceneFilmstrip consume it unchanged.
+// It owns its own element (rather than reaching into the videojs scene player),
+// so looping is a timeupdate guard rather than an AB-loop plugin, with no
+// poll-until-ready dance. ClipTrimmer/SceneFilmstrip consume it via the interface.
 export function useVideoClock(
   videoRef: RefObject<HTMLVideoElement>,
   fallbackDuration = 0
