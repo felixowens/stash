@@ -940,6 +940,8 @@
   "clip": "Clip",
   "clip_count": "Clip Count",
   "clips": "Clips",
+  "clips_more_from_scene": "More from this scene",
+  "clips_jump_to_moment": "Jump to {time}",
   "country": "Country",
   "cover_image": "Cover Image",
   "created_at": "Created At",

@@ -1,0 +1,978 @@
+// Clips — portrait, overlay-first surfaces.
+// Clips carry their own signature accent (blue → violet) so they read as distinct
+// from scene-blue across the app.
+
+/* stylelint-disable selector-class-pattern -- intentional BEM __element / --modifier names; renaming would churn the matching classNames in TSX */
+
+$clip-accent-a: #2b95d6;
+$clip-accent-b: #7b61ff;
+$clip-accent: linear-gradient(135deg, $clip-accent-a, $clip-accent-b);
+$clip-gold: #ffc940;
+$clip-frame-bg: #19222a;
+$clip-glass: rgba(10, 14, 18, 0.62);
+
+// ============================================================
+// Performer avatar stack (small shared primitive)
+// ============================================================
+.performer-avatar-stack {
+  align-items: center;
+  display: flex;
+
+  &__avatar {
+    background: #37495a;
+    border: 2px solid #0c1116;
+    border-radius: 50%;
+    height: 23px;
+    margin-left: -8px;
+    object-fit: cover;
+    object-position: top;
+    width: 23px;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+
+  &__overflow {
+    background: #37495a;
+    border: 2px solid #0c1116;
+    border-radius: 12px;
+    color: #f5f8fa;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    height: 23px;
+    line-height: 19px;
+    margin-left: -6px;
+    min-width: 23px;
+    padding: 0 6px;
+    text-align: center;
+  }
+}
+
+// ============================================================
+// Immersive mosaic wall
+// ============================================================
+.clip-wall {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--clip-tile-min, 180px), 1fr)
+  );
+  margin: 0;
+  padding: 0;
+}
+
+// ============================================================
+// Portrait overlay clip card
+// ============================================================
+.clip-card.grid-card {
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  margin: 0;
+  overflow: visible;
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.25, 1), box-shadow 0.28s;
+  width: auto;
+
+  // selection checkbox sits above the overlay chrome
+  .card-controls {
+    z-index: 6;
+  }
+
+  // no title/details/popover chrome below the frame — it all lives in the overlay
+  .card-section {
+    display: none;
+  }
+
+  .clip-thumb.thumbnail-section {
+    aspect-ratio: 9 / 16;
+    background: $clip-frame-bg;
+    border-radius: 12px;
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+
+    // accent ring on hover
+    &::after {
+      border-radius: 12px;
+      box-shadow: inset 0 0 0 1.5px transparent;
+      content: "";
+      inset: 0;
+      pointer-events: none;
+      position: absolute;
+      transition: box-shadow 0.28s;
+      z-index: 4;
+    }
+  }
+
+  .clip-card-link {
+    display: block;
+    inset: 0;
+    position: absolute;
+    z-index: 1;
+  }
+
+  .scene-card-preview {
+    height: 100%;
+    inset: 0;
+    margin: 0;
+    position: absolute;
+
+    .scene-card-preview-image,
+    .scene-card-preview-video {
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      width: 100%;
+    }
+  }
+
+  &:hover {
+    box-shadow: 0 22px 46px -14px rgba(0, 0, 0, 0.7);
+    transform: translateY(-6px) scale(1.025);
+    z-index: 5;
+
+    .clip-thumb.thumbnail-section::after {
+      box-shadow: inset 0 0 0 2px rgba(123, 97, 255, 0.85);
+    }
+
+    .clip-card__playcue {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .clip-card__reveal {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    // duration lives where the reveal rises — fade it out on hover
+    .clip-card__duration {
+      opacity: 0;
+    }
+  }
+}
+
+// ---- overlay layer ----
+.clip-card__overlay {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+
+.clip-pill {
+  align-items: center;
+  backdrop-filter: blur(7px);
+  background: $clip-glass;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 11.5px;
+  font-weight: 700;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  padding: 3px 7px;
+
+  svg {
+    height: 11px;
+    width: 11px;
+  }
+
+  &--star {
+    color: $clip-gold;
+
+    svg {
+      color: $clip-gold;
+    }
+  }
+
+  &--dur {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.clip-card__rating {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
+.clip-card__duration {
+  bottom: 8px;
+  position: absolute;
+  right: 8px;
+  transition: opacity 0.28s;
+}
+
+.clip-card__playcue {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  opacity: 0;
+  position: absolute;
+  transform: scale(0.85);
+  transition: opacity 0.28s, transform 0.28s;
+
+  &-circ {
+    align-items: center;
+    backdrop-filter: blur(4px);
+    background: rgba(123, 97, 255, 0.3);
+    border: 1.5px solid rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    display: flex;
+    height: 48px;
+    justify-content: center;
+    width: 48px;
+
+    svg {
+      color: #fff;
+      height: 19px;
+      margin-left: 3px;
+      width: 19px;
+    }
+  }
+}
+
+.clip-card__reveal {
+  background: linear-gradient(
+    to top,
+    rgba(8, 11, 14, 0.95) 30%,
+    rgba(8, 11, 14, 0.72) 62%,
+    transparent
+  );
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  padding: 30px 11px 11px;
+  position: absolute;
+  right: 0;
+  transform: translateY(101%);
+  transition: transform 0.34s cubic-bezier(0.2, 0.7, 0.25, 1), opacity 0.26s;
+}
+
+.clip-card__title {
+  -webkit-box-orient: vertical;
+  color: #fff;
+  display: -webkit-box;
+  font-size: 13.5px;
+  font-weight: 800;
+  -webkit-line-clamp: 2;
+  line-height: 1.22;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+
+.clip-card__source {
+  align-items: center;
+  color: #c4cfd8;
+  display: flex;
+  font-size: 11px;
+  gap: 5px;
+  margin-bottom: 9px;
+  min-width: 0;
+  pointer-events: auto;
+
+  svg {
+    color: $clip-accent-b;
+    flex: 0 0 auto;
+    height: 11px;
+    width: 11px;
+  }
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+.clip-card__source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// zero the global .fa-icon horizontal margin inside gap-based clip layouts
+.clip-card {
+  .clip-pill svg,
+  .clip-card__source svg,
+  .clip-card__stats svg,
+  .clip-card__playcue-circ svg {
+    margin: 0;
+  }
+}
+
+.clip-card__metafoot {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.clip-card__stats {
+  color: #cdd7df;
+  display: flex;
+  font-size: 11.5px;
+  font-weight: 600;
+  gap: 9px;
+
+  span {
+    align-items: center;
+    display: inline-flex;
+    font-variant-numeric: tabular-nums;
+    gap: 4px;
+  }
+
+  svg {
+    height: 12px;
+    width: 12px;
+  }
+}
+
+// ============================================================
+// Clip detail — hero backdrop + portrait player + info rail
+// ============================================================
+.clip-detail {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 22px 22px 80px;
+}
+
+.clip-detail__hero {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  margin-bottom: 30px;
+  overflow: hidden;
+  position: relative;
+}
+
+.clip-detail__backdrop {
+  background-position: center;
+  background-size: cover;
+  filter: blur(40px) saturate(1.4) brightness(0.5);
+  inset: 0;
+  position: absolute;
+  transform: scale(1.25);
+
+  &::after {
+    background: radial-gradient(
+        120% 80% at 50% 0%,
+        rgba(123, 97, 255, 0.18),
+        transparent 60%
+      ),
+      rgba(15, 20, 25, 0.6);
+    content: "";
+    inset: 0;
+    position: absolute;
+  }
+}
+
+.clip-detail__grid {
+  align-items: start;
+  display: grid;
+  gap: 34px;
+  grid-template-columns: auto 1fr;
+  padding: 34px;
+  position: relative;
+
+  @media (max-width: 840px) {
+    gap: 22px;
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+}
+
+.clip-detail__player {
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.8);
+  max-width: 42vw;
+  overflow: hidden;
+  width: 340px;
+
+  @media (max-width: 840px) {
+    margin: 0 auto;
+    max-width: 78vw;
+    width: 280px;
+  }
+}
+
+.clip-detail__video {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.clip-detail__rail {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.clip-detail__source {
+  align-items: center;
+  color: $clip-accent-b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 7px;
+  margin-bottom: 8px;
+
+  svg {
+    height: 14px;
+    margin: 0;
+    width: 14px;
+  }
+
+  a {
+    color: #abb9c4;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+}
+
+.clip-detail__source-sep {
+  color: #7e909e;
+}
+
+.clip-detail__title {
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0 0 14px;
+}
+
+.clip-detail__rating {
+  margin-bottom: 18px;
+}
+
+// ---- stat chips ----
+.clip-stat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.clip-stat {
+  backdrop-filter: blur(6px);
+  background: rgba(12, 17, 22, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+  min-width: 84px;
+  padding: 11px 15px;
+
+  &__n {
+    align-items: center;
+    color: #fff;
+    display: flex;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    gap: 7px;
+
+    svg {
+      color: $clip-accent-b;
+      height: 16px;
+      margin: 0;
+      width: 16px;
+    }
+  }
+
+  &__l {
+    color: #7e909e;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    margin-top: 2px;
+    text-transform: uppercase;
+  }
+}
+
+// ---- action row ----
+.clip-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.clip-detail__act {
+  align-items: center;
+  background: #30404d;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  color: #f5f8fa;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13.5px;
+  font-weight: 600;
+  gap: 8px;
+  padding: 10px 15px;
+
+  svg {
+    height: 15px;
+    margin: 0;
+    width: 15px;
+  }
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  &--primary {
+    background: $clip-accent;
+    border-color: transparent;
+    box-shadow: 0 8px 20px -8px rgba(123, 97, 255, 0.7);
+  }
+
+  &--danger {
+    color: #ff9a9a;
+  }
+
+  &.is-active {
+    border-color: $clip-accent-b;
+    color: #fff;
+  }
+}
+
+// ---- info blocks ----
+.clip-detail__block {
+  margin-bottom: 22px;
+}
+
+.clip-detail__bh {
+  color: #7e909e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  margin-bottom: 11px;
+  text-transform: uppercase;
+}
+
+.clip-detail__perfrow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clip-detail__perf {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+
+  img {
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 50%;
+    height: 42px;
+    object-fit: cover;
+    object-position: top;
+    width: 42px;
+  }
+
+  &-nm {
+    color: #f5f8fa;
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+
+  &:hover .clip-detail__perf-nm {
+    color: #fff;
+    text-decoration: underline;
+  }
+}
+
+.clip-detail__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clip-detail__details-text {
+  color: #cdd7df;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 620px;
+  white-space: pre-wrap;
+}
+
+// ---- related strip ----
+.clip-related {
+  margin: 0 auto;
+  max-width: 1200px;
+
+  &__head {
+    align-items: center;
+    display: flex;
+    font-size: 16px;
+    font-weight: 700;
+    gap: 9px;
+    margin: 0 0 16px;
+
+    svg {
+      color: $clip-accent-b;
+      height: 17px;
+      margin: 0;
+      width: 17px;
+    }
+  }
+
+  &__strip {
+    display: grid;
+    gap: 16px;
+    grid-auto-columns: 170px;
+    grid-auto-flow: column;
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
+
+  &__item {
+    min-width: 0;
+  }
+}
+
+// ============================================================
+// Scene → create-clip dock (trim track + inline create bar)
+// ============================================================
+.clip-create-dock {
+  background: $clip-frame-bg;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  margin-bottom: 16px;
+  padding: 14px 14px 16px;
+}
+
+.clip-create-dock__head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.clip-create-dock__title {
+  align-items: center;
+  color: #f5f8fa;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 9px;
+
+  svg {
+    color: $clip-accent-b;
+    margin: 0;
+  }
+}
+
+.clip-create-dock__close.minimal {
+  color: #abb9c4;
+
+  svg {
+    margin: 0;
+  }
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+// ---- trim track ----
+.clip-trim__readout {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 9px;
+
+  div span {
+    color: #7e909e;
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+
+  div b {
+    color: #fff;
+    display: block;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+  }
+
+  .clip-trim__len b {
+    background: linear-gradient(90deg, #7cc4ff, #b9a8ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+.clip-trim__track {
+  background: #11171d;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+  cursor: pointer;
+  height: 64px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+
+.clip-filmstrip {
+  display: flex;
+  inset: 0;
+  opacity: 0.45;
+  position: absolute;
+
+  &--empty {
+    background: repeating-linear-gradient(
+      90deg,
+      #11171d,
+      #11171d 3px,
+      #141c23 3px,
+      #141c23 30px
+    );
+    opacity: 1;
+  }
+
+  &__cell {
+    display: flex;
+    flex: 1 1 0;
+    height: 100%;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  &__frame {
+    background-repeat: no-repeat;
+    flex: 0 0 auto;
+  }
+}
+
+.clip-trim__mask {
+  background: rgba(8, 11, 14, 0.62);
+  bottom: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  z-index: 2;
+}
+
+.clip-trim__sel {
+  background: linear-gradient(
+    135deg,
+    rgba(43, 149, 214, 0.3),
+    rgba(123, 97, 255, 0.36)
+  );
+  bottom: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  position: absolute;
+  top: 0;
+  z-index: 3;
+
+  &::before {
+    border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+    border-top: 2px solid rgba(255, 255, 255, 0.5);
+    content: "";
+    inset: 0;
+    position: absolute;
+  }
+}
+
+.clip-trim__selbadge {
+  background: rgba(10, 13, 17, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  left: 50%;
+  padding: 2px 8px;
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.clip-trim__handle {
+  align-items: center;
+  bottom: 0;
+  cursor: ew-resize;
+  display: flex;
+  justify-content: center;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  transform: translateX(-50%);
+  width: 22px;
+  z-index: 6;
+}
+
+.clip-trim__grip {
+  background: linear-gradient(180deg, #fff, #d8def0);
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+  height: 42px;
+  width: 8px;
+}
+
+.clip-trim__playhead {
+  background: #fff;
+  bottom: 0;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 2px;
+  z-index: 7;
+}
+
+.clip-trim__controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.clip-trim__btn {
+  align-items: center;
+  background: #30404d;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  color: #f5f8fa;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 7px;
+  padding: 8px 13px;
+
+  svg {
+    margin: 0;
+  }
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  &--preview.is-active {
+    background: $clip-accent;
+    border-color: transparent;
+    color: #fff;
+  }
+}
+
+.clip-trim__nudge {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  display: inline-flex;
+  overflow: hidden;
+
+  button {
+    appearance: none;
+    background: #30404d;
+    border: 0;
+    color: #abb9c4;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 8px 11px;
+
+    svg {
+      margin: 0;
+    }
+
+    &:hover {
+      background: #37495a;
+      color: #fff;
+    }
+
+    & + button {
+      border-left: 1px solid rgba(255, 255, 255, 0.09);
+    }
+  }
+}
+
+// ---- inline create bar ----
+.clip-create-dock__bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.clip-create-dock__name {
+  flex: 1;
+  min-width: 160px;
+}
+
+.clip-create-dock__more {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+
+  svg {
+    margin: 0;
+  }
+
+  .clip-create-dock__chev {
+    transition: transform 0.2s;
+  }
+
+  &.is-open .clip-create-dock__chev {
+    transform: rotate(180deg);
+  }
+}
+
+.clip-create-dock__cta {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  white-space: nowrap;
+
+  svg {
+    margin: 0;
+  }
+}
+
+.clip-create-dock__details {
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  display: grid;
+  gap: 14px 16px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 14px;
+  padding-top: 14px;
+
+  @media (max-width: 680px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.clip-create-dock__field {
+  margin-bottom: 0;
+
+  &--wide {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useHistory, useParams } from "react-router-dom";
-import { Button, Tab, Tabs } from "react-bootstrap";
 import { FormattedMessage, useIntl } from "react-intl";
-import { faTrash } from "@fortawesome/free-solid-svg-icons";
+import cx from "classnames";
+import {
+  faBox,
+  faFilm,
+  faPencilAlt,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 import * as GQL from "src/core/generated-graphql";
 import {
   useClipDestroy,
@@ -14,14 +19,16 @@ import {
 } from "src/core/StashService";
 import { useToast } from "src/hooks/Toast";
 import { clipTitle } from "src/core/clips";
+import TextUtils from "src/utils/text";
 import { LoadingIndicator } from "../../Shared/LoadingIndicator";
 import { ErrorMessage } from "../../Shared/ErrorMessage";
 import { Icon } from "../../Shared/Icon";
+import { SweatDrops } from "../../Shared/SweatDrops";
+import { TagLink } from "../../Shared/TagLink";
 import { RatingSystem } from "../../Shared/Rating/RatingSystem";
-import { OrganizedButton } from "../../Scenes/SceneDetails/OrganizedButton";
-import { OCounterButton, ViewCountButton } from "../../Shared/CountButton";
-import { ClipDetailPanel } from "./ClipDetailPanel";
 import { ClipEditPanel } from "./ClipEditPanel";
+import { ClipStatChips } from "./ClipStatChips";
+import { ClipRelatedStrip } from "./ClipRelatedStrip";
 
 const ClipPage: React.FC<{ clip: GQL.ClipDataFragment }> = ({ clip }) => {
   const intl = useIntl();
@@ -35,6 +42,7 @@ const ClipPage: React.FC<{ clip: GQL.ClipDataFragment }> = ({ clip }) => {
   const [destroyClip] = useClipDestroy({ id: clip.id, delete_generated: true });
 
   const [organizedLoading, setOrganizedLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   // play tracking
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -118,67 +126,166 @@ const ClipPage: React.FC<{ clip: GQL.ClipDataFragment }> = ({ clip }) => {
     return () => flushActivity();
   }, [flushActivity]);
 
+  const sceneTitle = clip.scene?.title || `Scene ${clip.scene?.id}`;
+
   return (
-    <div className="clip-page row">
-      <div className="clip-player-container col-xl-7 col-lg-6">
-        <video
-          ref={videoRef}
-          className="clip-player w-100"
-          controls
-          playsInline
-          poster={clip.paths.screenshot ?? undefined}
-          src={clip.paths.stream ?? undefined}
-          onPlay={onPlay}
-          onTimeUpdate={onTimeUpdate}
-          onPause={flushActivity}
-          onEnded={flushActivity}
+    <div className="clip-detail">
+      <div className="clip-detail__hero">
+        <div
+          className="clip-detail__backdrop"
+          style={{
+            backgroundImage: clip.paths.screenshot
+              ? `url("${clip.paths.screenshot}")`
+              : undefined,
+          }}
         />
-      </div>
 
-      <div className="clip-info col-xl-5 col-lg-6">
-        <div className="clip-header">
-          <h3 className="clip-header-title">{clipTitle(clip)}</h3>
-          <div className="clip-header-controls">
-            <RatingSystem value={clip.rating100} onSetRating={onSetRating} />
-            <OrganizedButton
-              loading={organizedLoading}
-              organized={clip.organized}
-              onClick={onToggleOrganized}
+        <div className="clip-detail__grid">
+          <div className="clip-detail__player">
+            <video
+              ref={videoRef}
+              className="clip-detail__video"
+              controls
+              playsInline
+              poster={clip.paths.screenshot ?? undefined}
+              src={clip.paths.stream ?? undefined}
+              onPlay={onPlay}
+              onTimeUpdate={onTimeUpdate}
+              onPause={flushActivity}
+              onEnded={flushActivity}
             />
-            <OCounterButton
-              value={clip.o_counter ?? 0}
-              onIncrement={() => incrementO()}
-            />
-            <ViewCountButton value={clip.play_count ?? 0} />
-            <Button variant="danger" className="ml-auto" onClick={onDelete}>
-              <Icon icon={faTrash} />
-            </Button>
           </div>
-          {clip.scene && (
-            <div className="clip-source-scene">
-              <FormattedMessage id="scene" />:{" "}
-              <Link to={`/scenes/${clip.scene.id}`}>
-                {clip.scene.title || `Scene ${clip.scene.id}`}
-              </Link>
-            </div>
-          )}
-        </div>
 
-        <Tabs id="clip-tabs" defaultActiveKey="clip-details" mountOnEnter>
-          <Tab
-            eventKey="clip-details"
-            title={intl.formatMessage({ id: "details" })}
-          >
-            <ClipDetailPanel clip={clip} />
-          </Tab>
-          <Tab
-            eventKey="clip-edit"
-            title={intl.formatMessage({ id: "actions.edit" })}
-          >
-            <ClipEditPanel clip={clip} />
-          </Tab>
-        </Tabs>
+          <div className="clip-detail__rail">
+            {isEditing ? (
+              <ClipEditPanel clip={clip} onClose={() => setIsEditing(false)} />
+            ) : (
+              <>
+                {clip.scene && (
+                  <div className="clip-detail__source">
+                    <Icon icon={faFilm} />
+                    <Link to={`/scenes/${clip.scene.id}`}>{sceneTitle}</Link>
+                    <span className="clip-detail__source-sep">·</span>
+                    <Link
+                      to={`/scenes/${clip.scene.id}?t=${Math.floor(
+                        clip.start_seconds
+                      )}`}
+                    >
+                      <FormattedMessage
+                        id="clips_jump_to_moment"
+                        values={{
+                          time: TextUtils.secondsToTimestamp(
+                            clip.start_seconds
+                          ),
+                        }}
+                      />
+                    </Link>
+                  </div>
+                )}
+
+                <h1 className="clip-detail__title">{clipTitle(clip)}</h1>
+
+                <div className="clip-detail__rating">
+                  <RatingSystem
+                    value={clip.rating100}
+                    onSetRating={onSetRating}
+                  />
+                </div>
+
+                <ClipStatChips clip={clip} />
+
+                <div className="clip-detail__actions">
+                  <button
+                    type="button"
+                    className="clip-detail__act clip-detail__act--primary"
+                    onClick={() => incrementO()}
+                  >
+                    <SweatDrops />
+                    <FormattedMessage id="o_count" />
+                  </button>
+                  <button
+                    type="button"
+                    className={cx("clip-detail__act", {
+                      "is-active": clip.organized,
+                    })}
+                    onClick={onToggleOrganized}
+                    disabled={organizedLoading}
+                  >
+                    <Icon icon={faBox} />
+                    <FormattedMessage id="organized" />
+                  </button>
+                  <button
+                    type="button"
+                    className="clip-detail__act"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Icon icon={faPencilAlt} />
+                    <FormattedMessage id="actions.edit" />
+                  </button>
+                  <button
+                    type="button"
+                    className="clip-detail__act clip-detail__act--danger"
+                    onClick={onDelete}
+                  >
+                    <Icon icon={faTrash} />
+                    <FormattedMessage id="actions.delete" />
+                  </button>
+                </div>
+
+                {clip.performers.length > 0 && (
+                  <div className="clip-detail__block">
+                    <div className="clip-detail__bh">
+                      <FormattedMessage id="performers" />
+                    </div>
+                    <div className="clip-detail__perfrow">
+                      {clip.performers.map((p) => (
+                        <Link
+                          key={p.id}
+                          className="clip-detail__perf"
+                          to={`/performers/${p.id}`}
+                        >
+                          <img
+                            src={p.image_path ?? undefined}
+                            alt={p.name}
+                            loading="lazy"
+                          />
+                          <span className="clip-detail__perf-nm">{p.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {clip.tags.length > 0 && (
+                  <div className="clip-detail__block">
+                    <div className="clip-detail__bh">
+                      <FormattedMessage id="tags" />
+                    </div>
+                    <div className="clip-detail__tags">
+                      {clip.tags.map((tag) => (
+                        <TagLink key={tag.id} tag={tag} linkType="scene" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {clip.details && (
+                  <div className="clip-detail__block">
+                    <div className="clip-detail__bh">
+                      <FormattedMessage id="details" />
+                    </div>
+                    <div className="clip-detail__details-text">
+                      {clip.details}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      <ClipRelatedStrip clip={clip} />
     </div>
   );
 };

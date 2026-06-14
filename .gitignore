@@ -73,3 +73,6 @@ __pycache__/
 
 # Local-only assets (real images for dev/testing — not for the repo)
 /assets/
+
+# Throwaway design scratch (mockups, not for the repo)
+/.scratch

@@ -1,10 +1,6 @@
 import React from "react";
 import * as GQL from "src/core/generated-graphql";
 import { ClipCard } from "./ClipCard";
-import {
-  useCardWidth,
-  useContainerDimensions,
-} from "../Shared/GridCard/GridCard";
 import { PatchComponent } from "src/patch";
 
 interface IClipCardGrid {
@@ -14,22 +10,23 @@ interface IClipCardGrid {
   onSelectChange: (id: string, selected: boolean, shiftKey: boolean) => void;
 }
 
-const zoomWidths = [240, 340, 480, 640];
+// zoomIndex (0..3) → minimum mosaic tile width; the CSS grid auto-fills columns.
+const tileMins = [148, 178, 220, 280];
 
 export const ClipCardGrid: React.FC<IClipCardGrid> = PatchComponent(
   "ClipCardGrid",
   ({ clips, selectedIds, zoomIndex, onSelectChange }) => {
-    const [componentRef, { width: containerWidth }] = useContainerDimensions();
-    const cardWidth = useCardWidth(containerWidth, zoomIndex, zoomWidths);
+    const tileMin = tileMins[zoomIndex] ?? tileMins[1];
 
     return (
-      <div className="row justify-content-center" ref={componentRef}>
+      <div
+        className="clip-wall"
+        style={{ "--clip-tile-min": `${tileMin}px` } as React.CSSProperties}
+      >
         {clips.map((clip) => (
           <ClipCard
             key={clip.id}
-            cardWidth={cardWidth}
             clip={clip}
-            zoomIndex={zoomIndex}
             selecting={selectedIds.size > 0}
             selected={selectedIds.has(clip.id)}
             onSelectedChanged={(selected: boolean, shiftKey: boolean) =>
