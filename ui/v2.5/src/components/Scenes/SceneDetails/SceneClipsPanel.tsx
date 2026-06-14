@@ -20,7 +20,11 @@ export const SceneClipsPanel: React.FC<ISceneClipsPanelProps> = ({ scene }) => {
   return (
     <div className="scene-clips-panel">
       <div className="clips-panel-header">
-        <Button variant="secondary" onClick={() => setCreating(true)}>
+        <Button
+          className="clip-create-button"
+          variant="secondary"
+          onClick={() => setCreating(true)}
+        >
           <Icon icon={faScissors} className="mr-2" />
           <FormattedMessage id="actions.create_clip" />
         </Button>

@@ -7,12 +7,7 @@ import { ScenePreview } from "../Scenes/SceneCard";
 import { PerformerAvatarStack } from "./PerformerAvatarStack";
 import { useConfigurationContext } from "src/hooks/Config";
 import { PatchComponent } from "src/patch";
-import {
-  faEye,
-  faFilm,
-  faPlay,
-  faStar,
-} from "@fortawesome/free-solid-svg-icons";
+import { faEye, faFilm, faStar } from "@fortawesome/free-solid-svg-icons";
 import {
   convertToRatingFormat,
   defaultRatingSystemOptions,
@@ -69,12 +64,6 @@ const ClipCardOverlay = PatchComponent(
             {TextUtils.secondsToTimestamp(duration)}
           </span>
         )}
-
-        <div className="clip-card__playcue">
-          <span className="clip-card__playcue-circ">
-            <Icon icon={faPlay} />
-          </span>
-        </div>
 
         <div className="clip-card__reveal">
           <div className="clip-card__title">{clipTitle(clip)}</div>
