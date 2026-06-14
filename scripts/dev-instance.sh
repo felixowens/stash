@@ -9,12 +9,18 @@
 # writing a config.yml makes IsNewSystem() false, so it boots straight into a
 # usable, populated UI.
 #
+# The embedded UI: `make stash` bakes ui/v2.5/build into the binary but never
+# rebuilds it, so a fresh build/boot auto-runs `make ui` first whenever ui/v2.5
+# sources changed since the last build (else skips it — fingerprint-cached). Use
+# `--ui` for live vite HMR instead, or `--no-ui-build` to skip the check entirely.
+#
 # Commands:
-#   up [--ui] [--scenario NAME] [--seed-args "..."]
+#   up [--ui] [--no-ui-build] [--scenario NAME] [--seed-args "..."]
 #                                   ensure ONE instance is up (build/boot/seed if
 #                                   needed, else reuse) and print its URL on stdout.
 #                                   --ui also (re)starts the vite hot-reload UI.
-#                                   idempotent — callers never pick or track ports.
+#                                   --no-ui-build skips the embedded-UI rebuild (fast,
+#                                   backend-only). idempotent — callers never pick ports.
 #                                   scenarios: default|minimal|empty|multi-image|edge
 #   down                            stop processes, remove the instance dir
 #   restart [...]                   rebuild backend + reboot, RE-SEED fresh (same flags as up)
@@ -35,6 +41,9 @@ DB="$DEV/stash.sqlite"
 CONF="$DEV/config.yml"
 LOG="$DEV/stash.log"
 UILOG="$DEV/ui.log"
+UIDIR="$REPO/ui/v2.5"
+UI_BUILD="$UIDIR/build"
+UI_STAMP="$UI_BUILD/.dev-ui-fingerprint"   # lives in gitignored build/, survives .dev wipes
 
 c_grn=$'\e[32m'; c_dim=$'\e[2m'; c_red=$'\e[31m'; c_rst=$'\e[0m'
 say()  { printf '%s\n' "$*" >&2; }
@@ -61,8 +70,41 @@ is_running() {
 
 build_backend() {
   say "${c_dim}building stash binary (make stash)...${c_rst}"
-  # Same recipe as a normal dev build; embeds the existing ui/v2.5/build.
+  # Same recipe as a normal dev build; embeds the *current* ui/v2.5/build (kept
+  # fresh by ensure_ui_fresh, which callers run first).
   make -C "$REPO" stash OUTPUT="$BIN" >&2 || die "backend build failed (see output above)"
+}
+
+# Fingerprint everything that feeds the UI bundle (path+size+mtime of every file
+# under ui/v2.5 except node_modules/build/dist). ~10ms. mtime-based, so a bare
+# `touch` counts as a change — fine for a dev loop (worst case: one extra build).
+ui_fingerprint() {
+  find "$UIDIR" \
+    -type d \( -name node_modules -o -name build -o -name dist \) -prune -o \
+    -type f -printf '%P\t%s\t%T@\n' 2>/dev/null | LC_ALL=C sort | sha1sum | cut -d' ' -f1
+}
+
+# True when the embedded bundle is missing or its inputs changed since it was built.
+ui_is_stale() {
+  [ -d "$UI_BUILD" ] || return 0          # never built
+  [ -f "$UI_STAMP" ] || return 0          # built, but not by us → can't trust it
+  [ "$(cat "$UI_STAMP" 2>/dev/null)" = "$(ui_fingerprint)" ] && return 1 || return 0
+}
+
+# Rebuild the embedded UI bundle iff its sources changed, then re-stamp it.
+# `make stash` embeds ui/v2.5/build but never rebuilds it, so without this an
+# src/ edit silently never reaches the instance at :9920. The stamp is written
+# *after* the build, capturing any build-time file writes so the next run is a
+# clean skip. Stamp computed post-build → stored in build/ (survives `.dev` wipe).
+ensure_ui_fresh() {
+  if ui_is_stale; then
+    say "${c_dim}embedded UI stale (ui/v2.5/src changed since last build) — rebuilding (make ui)...${c_rst}"
+    make -C "$REPO" ui >&2 || die "UI build failed (see output above)"
+    ui_fingerprint >"$UI_STAMP"
+    ok "embedded UI rebuilt"
+  else
+    say "${c_dim}embedded UI up to date — skipping rebuild${c_rst}"
+  fi
 }
 
 write_config() {
@@ -135,10 +177,11 @@ kill_port() {
 }
 
 cmd_up() {
-  local with_ui=0 seed_args=""
+  local with_ui=0 seed_args="" skip_ui_build=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --ui) with_ui=1 ;;
+      --no-ui-build) skip_ui_build=1 ;;   # fast backend-only (re)start; leave embedded UI as-is
       --scenario) seed_args="$seed_args --scenario $2"; shift ;;
       --seed-args) seed_args="$seed_args $2"; shift ;;
       *) die "unknown flag: $1" ;;
@@ -149,6 +192,10 @@ cmd_up() {
   if is_running; then
     load_env
     [ "$with_ui" -eq 1 ] && start_ui   # honor --ui even on an already-running instance
+    # reuse doesn't rebuild — flag if the live instance's embedded UI is now stale
+    if [ "$with_ui" -eq 0 ] && ui_is_stale; then
+      say "${c_dim}note: embedded UI may be stale — \`$0 restart\` to rebuild, or \`up --ui\` for live HMR${c_rst}"
+    fi
     ok "already up — reusing → $(primary_url)"
     primary_url                         # stdout: just the URL, for callers
     return 0
@@ -156,6 +203,12 @@ cmd_up() {
 
   rm -rf "$DEV"
   mkdir -p "$DEV/generated" "$DEV/cache"
+
+  # Keep the embedded bundle current with src/ before it's baked into the binary.
+  # Skipped for --ui (vite serves live src) and --no-ui-build (explicit fast path).
+  if [ "$with_ui" -eq 0 ] && [ "$skip_ui_build" -eq 0 ]; then
+    ensure_ui_fresh
+  fi
 
   build_backend
   local port; port="$(free_port)"
@@ -247,5 +300,5 @@ case "$cmd" in
   logs)    cmd_logs "$@" ;;
   url)     cmd_url ;;
   gql)     cmd_gql "$@" ;;
-  *) say "usage: $0 {up [--ui] [--scenario NAME] [--seed-args \"...\"]|down|restart|status|logs [-f]|url|gql <q> [vars]}"; exit 2 ;;
+  *) say "usage: $0 {up [--ui] [--no-ui-build] [--scenario NAME] [--seed-args \"...\"]|down|restart|status|logs [-f]|url|gql <q> [vars]}"; exit 2 ;;
 esac
