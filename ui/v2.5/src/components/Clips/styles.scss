@@ -55,7 +55,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 // ============================================================
 .clip-wall {
   display: grid;
-  gap: 9px;
+  gap: 7px;
   grid-template-columns: repeat(
     auto-fill,
     minmax(var(--clip-tile-min, 180px), 1fr)
@@ -73,7 +73,11 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   border-radius: 12px;
   box-shadow: none;
   margin: 0;
+  // GridCard renders a Bootstrap .card, which carries 20px padding — that inset
+  // shrinks the 9:16 thumb below its grid track and reads as huge gaps. Kill it
+  // so the image fills the tile edge-to-edge (the mosaic look).
   overflow: visible;
+  padding: 0;
   transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.25, 1), box-shadow 0.28s;
   width: auto;
 
@@ -148,11 +152,6 @@ $clip-glass: rgba(10, 14, 18, 0.62);
       opacity: 1;
       transform: translateY(0);
     }
-
-    // duration lives where the reveal rises — fade it out on hover
-    .clip-card__duration {
-      opacity: 0;
-    }
   }
 }
 
@@ -197,17 +196,18 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   }
 }
 
+// mosaic chrome: rating top-left, duration top-right — both persist on hover,
+// clear of the reveal panel that rises from the bottom
 .clip-card__rating {
+  left: 8px;
   position: absolute;
-  right: 8px;
   top: 8px;
 }
 
 .clip-card__duration {
-  bottom: 8px;
   position: absolute;
   right: 8px;
-  transition: opacity 0.28s;
+  top: 8px;
 }
 
 .clip-card__playcue {
