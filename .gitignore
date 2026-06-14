@@ -68,5 +68,8 @@ dist
 # dev-instance.sh throwaway state
 /.dev
 
+# Python bytecode cache (scripts/dev-seed.py etc.)
+__pycache__/
+
 # Local-only assets (real images for dev/testing — not for the repo)
 /assets/

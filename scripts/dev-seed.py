@@ -19,6 +19,11 @@ Scenarios let you boot into a *specific* state to verify against:
     edge         gnarly names (unicode, emoji, very long, quotes, XSS probe) to
                  catch rendering/escaping bugs
 
+When real videos are present in assets/scenes/ (gitignored), every scenario
+except empty/edge points a library at them, scans them into real playable
+scenes, and assigns studios/performers/tags — so the instance has genuine
+video to drive the scene player and the clips feature.
+
 Usage:
     dev-seed.py --url http://localhost:PORT [--scenario NAME]
                 [--performers N] [--studios N] [--tags N] [--dry-run]
@@ -31,8 +36,10 @@ import base64
 import json
 import os
 import random
+import re
 import struct
 import sys
+import time
 import urllib.request
 import zlib
 
@@ -44,12 +51,13 @@ COUNTRIES = ["US", "GB", "DE", "FR", "JP", "BR", "CA", "AU", "SE", "CZ"]
 
 # scenario -> default counts + knobs. images is the (min, max) per performer.
 SCENARIOS = {
-    "default":     {"performers": 80, "studios": 25, "tags": 40},
-    "minimal":     {"performers": 6,  "studios": 3,  "tags": 5},
+    "default":     {"performers": 80, "studios": 25, "tags": 40, "scenes": True},
+    "minimal":     {"performers": 6,  "studios": 3,  "tags": 5,  "scenes": True},
     "empty":       {"performers": 0,  "studios": 0,  "tags": 0},
-    "multi-image": {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4)},
+    "multi-image": {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4),
+                    "scenes": True},
     "faces":       {"performers": 24, "studios": 6,  "tags": 12, "images": (2, 4),
-                    "real_faces": True, "rating_range": (60, 100)},
+                    "real_faces": True, "rating_range": (60, 100), "scenes": True},
     "edge":        {"performers": 0,  "studios": 4,  "tags": 6,  "edge": True},
 }
 
@@ -149,6 +157,199 @@ def face_data_url(path):
         return f"data:{mime};base64," + base64.b64encode(fh.read()).decode()
 
 
+# Real scene videos live in assets/scenes/ (gitignored). When present, the seed
+# points a stash library at them and scans them into real, playable scenes, then
+# assigns studios/performers/tags — so the dev instance has genuine video to
+# drive (the scene player, and the clips feature in particular).
+_SCENE_EXTS = {".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi"}
+_DATE_RE = re.compile(r"(20\d{2}-\d{2}-\d{2})")
+# Pleasant fallback titles for files whose names are just ids/hashes.
+_SCENE_TITLES = [
+    "Golden Hour", "Backstage", "Afterglow", "Close Up", "Slow Motion",
+    "First Take", "Off the Record", "Night Shift", "Daydream", "B-Roll",
+]
+
+
+def scene_file_paths():
+    """Paths of video files in assets/scenes/, sorted. [] if the dir is absent."""
+    scene_dir = os.path.join(ASSETS, "scenes")
+    try:
+        names = sorted(os.listdir(scene_dir))
+    except OSError:
+        return []
+    return [
+        os.path.join(scene_dir, n)
+        for n in names
+        if os.path.splitext(n)[1].lower() in _SCENE_EXTS
+    ]
+
+
+def derive_scene_title_date(path):
+    """(title|None, date|None) from a video filename. A None title means the
+    name was all ids/hashes — the caller should pick a fallback."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    m = _DATE_RE.search(stem)
+    date = m.group(1) if m else None
+    cleaned = stem.replace(date, " ") if date else stem
+    cleaned = cleaned.lstrip("@")
+    cleaned = re.sub(r"[0-9a-f]{8,}", " ", cleaned, flags=re.I)  # ids / content hashes
+    cleaned = re.sub(r"[_\-]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) < 3 or cleaned.isdigit():
+        return None, date
+    return cleaned.title(), date
+
+
+def wait_for_job(url, job_id, timeout=300):
+    """Poll findJob until it reaches a terminal status. Returns the final status
+    string (or 'TIMEOUT'). A job that has left the queue counts as FINISHED."""
+    deadline = time.time() + timeout
+    next_tick = 0.0
+    while time.time() < deadline:
+        job = gql(
+            url,
+            "query($i: FindJobInput!){ findJob(input:$i){ status progress } }",
+            {"i": {"id": job_id}},
+        ).get("findJob")
+        if job is None:
+            return "FINISHED"
+        if job["status"] in ("FINISHED", "CANCELLED", "FAILED"):
+            return job["status"]
+        now = time.time()
+        if now >= next_tick:
+            print(f"    scanning… {int((job.get('progress') or 0) * 100)}%", file=sys.stderr)
+            next_tick = now + 5
+        time.sleep(0.5)
+    return "TIMEOUT"
+
+
+def seed_scenes(url, rng, studio_ids, performer_ids, tag_ids, rich):
+    """Scan assets/scenes/ into real scenes and assign metadata. No-op if empty."""
+    paths = scene_file_paths()
+    if not paths:
+        return []
+    scene_dir = os.path.join(ASSETS, "scenes")
+    print(f"  scenes:     {len(paths)} videos in assets/scenes/ — scanning…")
+
+    # Point a library at the videos (config.yml ships with stash:[]) and import.
+    gql(
+        url,
+        "mutation($i: ConfigGeneralInput!){ configureGeneral(input:$i){ stashes{ path } } }",
+        {"i": {"stashes": [{"path": scene_dir, "excludeVideo": False, "excludeImage": True}]}},
+    )
+    job_id = gql(
+        url,
+        "mutation($i: ScanMetadataInput!){ metadataScan(input:$i) }",
+        {"i": {
+            "paths": [scene_dir],
+            "scanGenerateCovers": True,        # scene-card thumbnails
+            "scanGenerateSprites": rich,       # scrubber sprite sheet
+            "scanGeneratePreviews": rich,      # hover preview video
+        }},
+    )["metadataScan"]
+    status = wait_for_job(url, job_id)
+    if status != "FINISHED":
+        print(f"  ! scene scan ended {status} — see instance logs", file=sys.stderr)
+
+    scenes = gql(
+        url,
+        "query{ findScenes(filter:{per_page:-1}){ scenes{ id files{ path duration } } } }",
+    )["findScenes"]["scenes"]
+
+    fallback = list(_SCENE_TITLES)
+    rng.shuffle(fallback)
+    enriched = 0
+    for idx, s in enumerate(scenes):
+        path = s["files"][0]["path"] if s.get("files") else ""
+        title, date = derive_scene_title_date(path) if path else (None, None)
+        upd = {
+            "id": s["id"],
+            "title": title or fallback[idx % len(fallback)],
+            "organized": rng.random() < 0.5,
+        }
+        if date:
+            upd["date"] = date
+        if rng.random() < 0.85:
+            upd["rating100"] = rng.randint(50, 100)
+        if studio_ids and rng.random() < 0.8:
+            upd["studio_id"] = rng.choice(studio_ids)
+        if performer_ids:
+            upd["performer_ids"] = rng.sample(
+                performer_ids, k=rng.randint(1, min(3, len(performer_ids)))
+            )
+        if tag_ids:
+            k = rng.randint(0, min(4, len(tag_ids)))
+            if k:
+                upd["tag_ids"] = rng.sample(tag_ids, k)
+        try:
+            gql(url, "mutation($i: SceneUpdateInput!){ sceneUpdate(input:$i){ id } }", {"i": upd})
+            enriched += 1
+        except RuntimeError as exc:
+            print(f"  scene {s['id']} enrich failed: {exc}", file=sys.stderr)
+    print(f"  scenes:     {enriched} imported + enriched"
+          + ("" if rich else " (covers only)"))
+    return [
+        {"id": s["id"], "duration": (s["files"][0]["duration"] if s.get("files") else 0) or 0}
+        for s in scenes
+    ]
+
+
+# A few sample clips on the seeded scenes, so /clips and the Scene→Clips panel
+# are populated on boot. clipCreate inherits the scene's performers + studio and
+# enqueues thumbnail generation; we wait for the job queue to drain so the cards
+# have real art rather than the pending placeholder.
+_CLIP_TITLES = [
+    "Best Bit", "The Reveal", "Highlight", "Intro", "Punchline",
+    "The Drop", "Key Moment", "Teaser", "Cold Open", "Outro",
+]
+
+
+def wait_for_queue(url, timeout=180):
+    """Block until no job is queued/running (clip thumbnail generation done)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        jobs = gql(url, "query{ jobQueue{ status } }").get("jobQueue") or []
+        if not any(j["status"] in ("READY", "RUNNING", "STOPPING") for j in jobs):
+            return
+        time.sleep(0.5)
+
+
+def seed_clips(url, rng, scenes, max_clips=3):
+    """Create up to max_clips clips spread across the longest seeded scenes."""
+    usable = sorted(
+        (s for s in scenes if s["duration"] >= 4),
+        key=lambda s: s["duration"], reverse=True,
+    )
+    if not usable:
+        return
+    titles = list(_CLIP_TITLES)
+    rng.shuffle(titles)
+    made = 0
+    for s in usable:
+        if made >= max_clips:
+            break
+        dur = s["duration"]
+        length = min(rng.uniform(3, 6), dur - 0.5)        # 3-6s, but fits the scene
+        start = round(rng.uniform(0, max(0.0, dur - length - 0.5)), 1)
+        inp = {
+            "scene_id": s["id"],
+            "start_seconds": start,
+            "end_seconds": round(start + length, 1),
+            "title": titles[made % len(titles)],
+        }
+        if rng.random() < 0.7:
+            inp["rating100"] = rng.randint(60, 100)
+        try:
+            gql(url, "mutation($i: ClipCreateInput!){ clipCreate(input:$i){ id } }", {"i": inp})
+            made += 1
+        except RuntimeError as exc:
+            print(f"  clip on scene {s['id']} failed: {exc}", file=sys.stderr)
+    if made:
+        print(f"  clips:      {made} created — generating thumbnails…")
+        wait_for_queue(url)
+        print(f"  clips:      {made} on scenes (thumbnails ready)")
+
+
 def performer_names(rng, count, edge, female, male, surname):
     """Return a list of (name, gender) specs to create."""
     specs = []
@@ -198,6 +399,13 @@ def main():
         print(f"  would create: {len(specs)} performers, {n_studio} studios, {n_tag} tags")
         if real_faces:
             print(f"  real faces in assets/face/: {len(face_image_paths())}")
+        if sc.get("scenes"):
+            sp = scene_file_paths()
+            print(f"  scenes from assets/scenes/: {len(sp)}")
+            for p in sp:
+                t, d = derive_scene_title_date(p)
+                print(f"    - {os.path.basename(p)} -> {t or '(fallback title)'}"
+                      + (f" [{d}]" if d else ""))
         for name, gender in specs[:8]:
             print(f"    - {name!r} [{gender}]")
         if len(specs) > 8:
@@ -250,6 +458,7 @@ def main():
         print(f"  faces:      {len(face_paths)} real images from assets/face/")
 
     made = 0
+    performer_ids = []
     for name, gender in specs:
         n_imgs = rng.randint(img_lo, img_hi)
         if use_faces:
@@ -276,16 +485,28 @@ def main():
         }
         i = {k: v for k, v in i.items() if v is not None}
         try:
-            gql(
+            data = gql(
                 args.url,
                 "mutation($i: PerformerCreateInput!){ performerCreate(input:$i){ id } }",
                 {"i": i},
             )
+            performer_ids.append(data["performerCreate"]["id"])
             made += 1
         except RuntimeError as exc:
             print(f"  performer '{name}' failed: {exc}", file=sys.stderr)
             raise
     print(f"  performers: {made} (with {img_lo}-{img_hi} images each)")
+
+    # Real scenes from assets/scenes/ (when present), assigned the studios/
+    # performers/tags just created. Best-effort: a scan failure warns but
+    # doesn't abort an otherwise-good seed.
+    if sc.get("scenes"):
+        try:
+            seeded = seed_scenes(args.url, rng, studio_ids, performer_ids, tag_ids,
+                                 rich=(args.scenario != "minimal"))
+            seed_clips(args.url, rng, seeded)
+        except RuntimeError as exc:
+            print(f"  ! scene seeding failed: {exc}", file=sys.stderr)
 
     # Boot clean: suppress the first-run release-notes modal so an agent opening
     # the instance lands straight on real content.

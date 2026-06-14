@@ -26,7 +26,7 @@ After backend changes: `./scripts/dev-instance.sh restart` (rebuilds + reboots).
 
 ## The dev instance — `scripts/dev-instance.sh`
 
-One command → a throwaway, **populated** Stash you can drive. No setup wizard (writing a config makes the system "already set up"); a fresh SQLite DB is auto-created, migrated to the current schema, then seeded over the GraphQL API with ~80 performers (with the multi-image collection), 25 studios, and 40 tags.
+One command → a throwaway, **populated** Stash you can drive. No setup wizard (writing a config makes the system "already set up"); a fresh SQLite DB is auto-created, migrated to the current schema, then seeded over the GraphQL API with ~80 performers (with the multi-image collection), 25 studios, and 40 tags. When real videos are present in `assets/scenes/` (gitignored), the seed also points a library at them, scans them into real playable scenes, assigns studios/performers/tags, and cuts a few sample clips (with generated thumbnails) — so the instance has genuine video to drive the scene player and the clips feature (every scenario except `empty`/`edge`).
 
 | Command | Does |
 |---|---|
