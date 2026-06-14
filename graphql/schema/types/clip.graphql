@@ -22,6 +22,8 @@ type Clip {
   tags: [Tag!]!
   performers: [Performer!]!
 
+  paths: ClipPathsType!
+
   "The number of times the o counter was incremented"
   o_counter: Int
   "The last time the clip was played"
@@ -98,4 +100,13 @@ input ClipDestroyInput {
 type FindClipsResultType {
   count: Int!
   clips: [Clip!]!
+}
+
+type ClipPathsType {
+  "Live, frame-accurate transcode of the bounded range of the source scene"
+  stream: String
+  "Generated short preview video (mp4) for card hover"
+  preview: String
+  "Generated screenshot (jpg) used as the card/detail poster"
+  screenshot: String
 }

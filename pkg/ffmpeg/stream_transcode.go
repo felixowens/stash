@@ -147,6 +147,12 @@ type TranscodeOptions struct {
 	VideoFile  *models.VideoFile
 	Resolution string
 	StartTime  float64
+	// Duration, if non-zero, bounds the output to this many seconds (output-relative -t).
+	Duration float64
+	// ForceTranscode disables the stream-copy fast path, forcing a real re-encode.
+	// Required for frame-accurate mid-file cuts: with -ss before -i and -c copy the
+	// output snaps to the nearest preceding keyframe, drifting the start.
+	ForceTranscode bool
 }
 
 func (o TranscodeOptions) FileGetCodec(sm *StreamManager, maxTranscodeSize int) (codec VideoCodec) {
@@ -162,7 +168,7 @@ func (o TranscodeOptions) FileGetCodec(sm *StreamManager, maxTranscodeSize int) 
 
 	switch o.StreamType.MimeType {
 	case MimeMp4Video:
-		if !needsResize && o.VideoFile.VideoCodec == H264 {
+		if !needsResize && !o.ForceTranscode && o.VideoFile.VideoCodec == H264 {
 			return VideoCodecCopy
 		}
 		codec = VideoCodecLibX264
@@ -170,7 +176,7 @@ func (o TranscodeOptions) FileGetCodec(sm *StreamManager, maxTranscodeSize int) 
 			codec = *hwcodec
 		}
 	case MimeWebmVideo:
-		if !needsResize && (o.VideoFile.VideoCodec == Vp8 || o.VideoFile.VideoCodec == Vp9) {
+		if !needsResize && !o.ForceTranscode && (o.VideoFile.VideoCodec == Vp8 || o.VideoFile.VideoCodec == Vp9) {
 			return VideoCodecCopy
 		}
 		codec = VideoCodecVP9
@@ -206,6 +212,11 @@ func (o TranscodeOptions) makeStreamArgs(sm *StreamManager) Args {
 	}
 
 	args = args.Input(o.VideoFile.Path)
+
+	// output-relative duration bound (-t after -i); used by clip streaming
+	if o.Duration != 0 {
+		args = args.Duration(o.Duration)
+	}
 
 	videoOnly := ProbeAudioCodec(o.VideoFile.AudioCodec) == MissingUnsupported
 

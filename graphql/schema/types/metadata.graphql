@@ -17,6 +17,8 @@ input GenerateMetadataInput {
   imagePhashes: Boolean
   imageThumbnails: Boolean
   clipPreviews: Boolean
+  "Generate preview + screenshot files for virtual scene clips"
+  sceneClips: Boolean
 
   "scene ids to generate for"
   sceneIDs: [ID!]
@@ -26,6 +28,8 @@ input GenerateMetadataInput {
   imageIDs: [ID!]
   "gallery ids to generate for"
   galleryIDs: [ID!]
+  "clip ids to generate for"
+  clipIDs: [ID!]
   "paths to run generate on, in addition to the other ID lists"
   paths: [String!]
 
@@ -60,6 +64,7 @@ type GenerateMetadataOptions {
   interactiveHeatmapsSpeeds: Boolean
   imageThumbnails: Boolean
   clipPreviews: Boolean
+  sceneClips: Boolean
 }
 
 type GeneratePreviewOptions {

@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/stashapp/stash/internal/manager"
+	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/sliceutil"
 	"github.com/stashapp/stash/pkg/sliceutil/stringslice"
@@ -77,6 +80,15 @@ func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput
 		return r.repository.Clip.Create(ctx, &newClip)
 	}); err != nil {
 		return nil, err
+	}
+
+	// enqueue generation of the clip's preview + screenshot (best-effort — a
+	// missing ffmpeg or disabled generation must not fail clip creation)
+	if _, err := manager.GetInstance().Generate(ctx, manager.GenerateMetadataInput{
+		ClipIDs:    []string{strconv.Itoa(newClip.ID)},
+		SceneClips: true,
+	}); err != nil {
+		logger.Warnf("error enqueuing clip generation for clip %d: %v", newClip.ID, err)
 	}
 
 	return r.getClip(ctx, newClip.ID)
@@ -199,16 +211,33 @@ func (r *mutationResolver) ClipDestroy(ctx context.Context, input ClipDestroyInp
 		return false, fmt.Errorf("converting id: %w", err)
 	}
 
-	// NOTE: deleting generated preview/screenshot files (input.DeleteGenerated)
-	// is wired up in Phase 3 when clip preview generation lands.
-
 	if err := r.withTxn(ctx, func(ctx context.Context) error {
 		return r.repository.Clip.Destroy(ctx, id)
 	}); err != nil {
 		return false, err
 	}
 
+	// after the clip is gone, optionally remove its generated files
+	if utils.IsTrue(input.DeleteGenerated) {
+		deleteGeneratedClipFiles(id)
+	}
+
 	return true, nil
+}
+
+// deleteGeneratedClipFiles best-effort removes the preview/screenshot files for
+// a destroyed clip.
+func deleteGeneratedClipFiles(clipID int) {
+	p := manager.GetInstance().Paths.Clips
+	for _, path := range []string{
+		p.GetVideoPreviewPath(clipID),
+		p.GetScreenshotPath(clipID),
+		p.GetWebpPreviewPath(clipID),
+	} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			logger.Warnf("error removing generated clip file %s: %v", path, err)
+		}
+	}
 }
 
 func (r *mutationResolver) ClipsDestroy(ctx context.Context, ids []string) (bool, error) {

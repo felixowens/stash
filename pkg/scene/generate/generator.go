@@ -33,6 +33,14 @@ type MarkerPaths interface {
 	GetScreenshotPath(checksum string, seconds int) string
 }
 
+type ClipPaths interface {
+	Paths
+
+	GetVideoPreviewPath(clipID int) string
+	GetWebpPreviewPath(clipID int) string
+	GetScreenshotPath(clipID int) string
+}
+
 type ScenePaths interface {
 	Paths
 
@@ -55,6 +63,7 @@ type Generator struct {
 	FFMpegConfig FFMpegConfig
 	LockManager  *fsutil.ReadLockManager
 	MarkerPaths  MarkerPaths
+	ClipPaths    ClipPaths
 	ScenePaths   ScenePaths
 	Overwrite    bool
 }

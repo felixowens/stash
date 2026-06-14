@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stashapp/stash/internal/api/loaders"
+	"github.com/stashapp/stash/internal/api/urlbuilders"
+	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/pkg/models"
 )
 
@@ -58,6 +60,22 @@ func (r *clipResolver) Performers(ctx context.Context, obj *models.Clip) (ret []
 	var errs []error
 	ret, errs = loaders.From(ctx).PerformerByID.LoadAll(obj.PerformerIDs.List())
 	return ret, firstError(errs)
+}
+
+func (r *clipResolver) Paths(ctx context.Context, obj *models.Clip) (*ClipPathsType, error) {
+	baseURL, _ := ctx.Value(BaseURLCtxKey).(string)
+	config := manager.GetInstance().Config
+	builder := urlbuilders.NewClipURLBuilder(baseURL, obj)
+
+	streamPath := builder.GetStreamURL(config.GetAPIKey()).String()
+	previewPath := builder.GetStreamPreviewURL()
+	screenshotPath := builder.GetScreenshotURL()
+
+	return &ClipPathsType{
+		Stream:     &streamPath,
+		Preview:    &previewPath,
+		Screenshot: &screenshotPath,
+	}, nil
 }
 
 func (r *clipResolver) OCounter(ctx context.Context, obj *models.Clip) (*int, error) {

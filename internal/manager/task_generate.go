@@ -32,7 +32,9 @@ type GenerateMetadataInput struct {
 	ImagePhashes              bool `json:"imagePhashes"`
 	InteractiveHeatmapsSpeeds bool `json:"interactiveHeatmapsSpeeds"`
 	ClipPreviews              bool `json:"clipPreviews"`
-	ImageThumbnails           bool `json:"imageThumbnails"`
+	// Generate preview + screenshot files for virtual scene clips
+	SceneClips      bool `json:"sceneClips"`
+	ImageThumbnails bool `json:"imageThumbnails"`
 	// scene ids to generate for
 	SceneIDs []string `json:"sceneIDs"`
 	// marker ids to generate for
@@ -41,6 +43,8 @@ type GenerateMetadataInput struct {
 	ImageIDs []string `json:"imageIDs"`
 	// gallery ids to generate for
 	GalleryIDs []string `json:"galleryIDs"`
+	// clip ids to generate for
+	ClipIDs []string `json:"clipIDs"`
 	// overwrite existing media
 	Overwrite bool `json:"overwrite"`
 	// paths to run generate on, in addition to the other ID lists
@@ -83,6 +87,7 @@ type totalsGenerate struct {
 	imagePhashes             int64
 	interactiveHeatmapSpeeds int64
 	clipPreviews             int64
+	sceneClips               int64
 	imageThumbnails          int64
 
 	tasks int
@@ -122,12 +127,17 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 		if err != nil {
 			logger.Error(err.Error())
 		}
+		clipIDs, err := stringslice.StringSliceToIntSlice(j.input.ClipIDs)
+		if err != nil {
+			logger.Error(err.Error())
+		}
 
 		g := &generate.Generator{
 			Encoder:      instance.FFMpeg,
 			FFMpegConfig: instance.Config,
 			LockManager:  instance.ReadLockManager,
 			MarkerPaths:  instance.Paths.SceneMarkers,
+			ClipPaths:    instance.Paths.Clips,
 			ScenePaths:   instance.Paths.Scene,
 			Overwrite:    j.overwrite,
 		}
@@ -139,6 +149,7 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 				len(j.input.MarkerIDs) == 0 &&
 				len(j.input.ImageIDs) == 0 &&
 				len(j.input.GalleryIDs) == 0 &&
+				len(j.input.ClipIDs) == 0 &&
 				len(j.input.Paths) == 0 {
 
 				j.queueTasks(ctx, g, nil, queue)
@@ -191,6 +202,16 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 					}
 				}
 
+				if len(j.input.ClipIDs) > 0 {
+					clips, err := r.Clip.FindMany(ctx, clipIDs)
+					if err != nil {
+						return err
+					}
+					for _, c := range clips {
+						j.queueClipJob(g, c, queue)
+					}
+				}
+
 				if len(j.input.Paths) > 0 {
 					paths := filterStashPaths(j.input.Paths)
 					j.queueTasks(ctx, g, paths, queue)
@@ -234,6 +255,9 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 		}
 		if j.input.ClipPreviews {
 			logMsg += fmt.Sprintf(" %d image clip previews", totals.clipPreviews)
+		}
+		if j.input.SceneClips {
+			logMsg += fmt.Sprintf(" %d scene clips", totals.sceneClips)
 		}
 		if j.input.ImageThumbnails {
 			logMsg += fmt.Sprintf(" %d image thumbnails", totals.imageThumbnails)
@@ -492,6 +516,23 @@ func (j *GenerateJob) queueSceneJobs(ctx context.Context, g *generate.Generator,
 		}
 	}
 
+	if j.input.SceneClips {
+		task := &GenerateClipsTask{
+			repository: r,
+			Scene:      scene,
+			Overwrite:  j.overwrite,
+			generator:  g,
+		}
+
+		clips := task.clipsNeeded(ctx)
+		if clips > 0 {
+			j.totals.sceneClips += int64(clips)
+			j.totals.tasks++
+
+			queue <- task
+		}
+	}
+
 	if j.input.Transcodes {
 		forceTranscode := j.input.ForceTranscodes
 		task := &GenerateTranscodeTask{
@@ -554,6 +595,18 @@ func (j *GenerateJob) queueMarkerJob(g *generate.Generator, marker *models.Scene
 		generator:           g,
 	}
 	j.totals.markers++
+	j.totals.tasks++
+	queue <- task
+}
+
+func (j *GenerateJob) queueClipJob(g *generate.Generator, clip *models.Clip, queue chan<- Task) {
+	task := &GenerateClipsTask{
+		repository: j.repository,
+		Clip:       clip,
+		Overwrite:  j.overwrite,
+		generator:  g,
+	}
+	j.totals.sceneClips++
 	j.totals.tasks++
 	queue <- task
 }
