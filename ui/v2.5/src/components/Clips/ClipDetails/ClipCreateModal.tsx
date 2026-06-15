@@ -93,19 +93,25 @@ export const ClipCreateModal: React.FC<IClipCreateModalProps> = ({
     else clockRef.current.play();
   }
 
+  // I / O plant the marker at the playhead; if it crosses the other marker, that
+  // one yields (the out is pushed forward / the in is dragged back) so a valid
+  // range survives — instead of pinning the new marker beside the old one.
   function setInAtPlayhead() {
-    const head = clockRef.current.currentTime;
-    setRange((r) => ({
-      ...r,
-      in: clamp(Math.min(head, r.out - MIN_LEN), 0, duration),
-    }));
+    const head = clamp(clockRef.current.currentTime, 0, duration);
+    setRange((r) => {
+      const ni = head;
+      const no =
+        ni > r.out - MIN_LEN ? Math.min(ni + MIN_LEN, duration) : r.out;
+      return { in: Math.min(ni, no - MIN_LEN), out: no };
+    });
   }
   function setOutAtPlayhead() {
-    const head = clockRef.current.currentTime;
-    setRange((r) => ({
-      ...r,
-      out: clamp(Math.max(head, r.in + MIN_LEN), 0, duration),
-    }));
+    const head = clamp(clockRef.current.currentTime, 0, duration);
+    setRange((r) => {
+      const no = head;
+      const ni = no < r.in + MIN_LEN ? Math.max(no - MIN_LEN, 0) : r.in;
+      return { in: ni, out: Math.max(no, ni + MIN_LEN) };
+    });
   }
 
   // I / O set in & out at the playhead, Space toggles play. Intercept in the
@@ -191,8 +197,9 @@ export const ClipCreateModal: React.FC<IClipCreateModalProps> = ({
               <span className="clip-theater__from"> — {sceneTitle}</span>
             </h2>
             <span className="clip-theater__hint">
-              <kbd>I</kbd> / <kbd>O</kbd> set in &amp; out · <kbd>Space</kbd>{" "}
-              play
+              <kbd>I</kbd> / <kbd>O</kbd> in &amp; out · <kbd>Space</kbd> play ·{" "}
+              <kbd>scroll</kbd> zoom · <kbd>F</kbd> fit · <kbd>Z</kbd> to
+              selection
             </span>
           </div>
           <Button

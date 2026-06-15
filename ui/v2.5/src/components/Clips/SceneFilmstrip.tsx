@@ -1,26 +1,40 @@
 import React, { useMemo } from "react";
-import { useSpriteInfo } from "src/hooks/sprite";
-
-// fixed track height the sprite frames are scaled to
-const TRACK_H = 64;
+import { ISceneSpriteInfo } from "src/hooks/sprite";
+import { IViewport, pctOf } from "./useTimelineViewport";
+import { spriteCropStyleFill, spriteSheetExtent } from "./spriteCrop";
 
 interface ISceneFilmstripProps {
-  vttPath?: string;
+  // sprites are fetched once by ClipTrimmer and shared (filmstrip + hover + minimap)
+  sprites: ISceneSpriteInfo[] | null | undefined;
+  view: IViewport;
 }
 
-// Lays the scene's VTT sprite sheet out as a horizontal strip across the trim
-// track. Falls back to a plain dark track when no sprites are available
-// (minimal seed / ungenerated scene) — the trim handles still work on time.
-const SceneFilmstripImpl: React.FC<ISceneFilmstripProps> = ({ vttPath }) => {
-  const sprites = useSpriteInfo(vttPath);
+// Lays the scene's VTT sprite frames across the trim track, positioned by their
+// real time through the current viewport — so zooming in spreads the relevant
+// frames out instead of squashing the whole scene to the track width. Falls back
+// to a plain dark track when no sprites are available (minimal seed / ungenerated
+// scene); the trim handles still work on time.
+//
+// Each frame is held at its natural aspect ratio and never widened past its slot:
+// zoomed out, many frames pack the track edge-to-edge; zoomed in past the sprite
+// density a frame caps at its natural width and the dark track shows through the
+// rest of its slot — coarse zoom reads as empty gaps, not a stretched smear.
+const SceneFilmstripImpl: React.FC<ISceneFilmstripProps> = ({
+  sprites,
+  view,
+}) => {
+  const sheet = useMemo(
+    () => (sprites && sprites.length ? spriteSheetExtent(sprites) : null),
+    [sprites]
+  );
 
-  // total sprite-sheet extents, for scaling a single frame out of the sheet
-  const sheet = useMemo(() => {
-    if (!sprites || sprites.length === 0) return null;
-    const x = Math.max(...sprites.map((s) => s.x + s.w));
-    const y = Math.max(...sprites.map((s) => s.y + s.h));
-    return { x, y };
-  }, [sprites]);
+  const visible = useMemo(
+    () =>
+      sprites
+        ? sprites.filter((s) => s.end > view.start && s.start < view.end)
+        : [],
+    [sprites, view.start, view.end]
+  );
 
   // null = missing/404, undefined = loading/no path → plain fallback track
   if (!sprites || sprites.length === 0 || !sheet) {
@@ -29,18 +43,20 @@ const SceneFilmstripImpl: React.FC<ISceneFilmstripProps> = ({ vttPath }) => {
 
   return (
     <div className="clip-filmstrip">
-      {sprites.map((s, i) => {
-        const scale = TRACK_H / s.h;
+      {visible.map((s) => {
+        const left = pctOf(s.start, view);
+        const width = pctOf(s.end, view) - left;
         return (
-          <div className="clip-filmstrip__cell" key={i}>
+          <div
+            className="clip-filmstrip__cell"
+            key={s.start}
+            style={{ left: `${left}%`, width: `${width}%` }}
+          >
             <div
               className="clip-filmstrip__frame"
               style={{
-                backgroundImage: `url(${s.url})`,
-                backgroundPosition: `${-s.x * scale}px ${-s.y * scale}px`,
-                backgroundSize: `${sheet.x * scale}px ${sheet.y * scale}px`,
-                width: `${s.w * scale}px`,
-                height: `${s.h * scale}px`,
+                aspectRatio: `${s.w} / ${s.h}`,
+                ...spriteCropStyleFill(s, sheet),
               }}
             />
           </div>

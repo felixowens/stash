@@ -672,10 +672,17 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 }
 
 // ---- trim track ----
+.clip-trim__topbar {
+  align-items: flex-end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
 .clip-trim__readout {
   display: flex;
   gap: 22px;
-  margin-bottom: 9px;
 
   div span {
     color: #7e909e;
@@ -702,6 +709,56 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   }
 }
 
+.clip-trim__zoombar {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+
+  button {
+    align-items: center;
+    appearance: none;
+    background: #30404d;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 8px;
+    color: #cdd7df;
+    cursor: pointer;
+    display: inline-flex;
+    height: 30px;
+    justify-content: center;
+    width: 32px;
+
+    svg {
+      margin: 0;
+    }
+
+    &:hover:not(:disabled) {
+      background: #37495a;
+      color: #fff;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.4;
+    }
+  }
+}
+
+.clip-trim__zoomreadout {
+  color: #9fb0bd;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 48px;
+  padding: 0 2px;
+  text-align: center;
+}
+
+// wraps the track so the floating hover preview can escape the track's overflow
+.clip-trim__trackwrap {
+  position: relative;
+}
+
 .clip-trim__track {
   background: #11171d;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -715,7 +772,6 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 }
 
 .clip-filmstrip {
-  display: flex;
   inset: 0;
   opacity: 0.45;
   position: absolute;
@@ -731,19 +787,26 @@ $clip-glass: rgba(10, 14, 18, 0.62);
     opacity: 1;
   }
 
+  // each cell is a time-proportional slot, positioned by the viewport (inline
+  // left/width %); the frame is centered in it so an over-wide slot (deep zoom)
+  // shows the dark track on either side rather than a stretched frame
   &__cell {
-    display: flex;
-    flex: 1 1 0;
-    height: 100%;
-    justify-content: center;
-    min-width: 0;
+    bottom: 0;
     overflow: hidden;
-    position: relative;
+    position: absolute;
+    text-align: center;
+    top: 0;
   }
 
+  // the frame keeps its natural aspect ratio (set inline from the sprite dims),
+  // capped at the slot width — packs tight when zoomed out, never stretches wider
+  // than natural when zoomed in past the sprite density
   &__frame {
     background-repeat: no-repeat;
-    flex: 0 0 auto;
+    display: inline-block;
+    height: 100%;
+    max-width: 100%;
+    vertical-align: top;
   }
 }
 
@@ -825,6 +888,146 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   top: 0;
   width: 2px;
   z-index: 7;
+}
+
+// pinned chevron shown when an in/out point is scrolled outside the view
+.clip-trim__offhandle {
+  align-items: center;
+  appearance: none;
+  background: $clip-accent;
+  border: 0;
+  bottom: 0;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  position: absolute;
+  top: 0;
+  width: 20px;
+  z-index: 6;
+
+  svg {
+    margin: 0;
+  }
+
+  &--left {
+    border-radius: 11px 0 0 11px;
+    left: 0;
+  }
+
+  &--right {
+    border-radius: 0 11px 11px 0;
+    right: 0;
+  }
+}
+
+// ---- floating hover preview (instant scrub feedback) ----
+.clip-trim__hoverpreview {
+  bottom: calc(100% + 10px);
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 12;
+}
+
+.clip-trim__hoverpreview-thumb {
+  background-repeat: no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.85);
+}
+
+.clip-trim__hoverpreview-time {
+  background: rgba(10, 13, 17, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: #fff;
+  display: block;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  margin: 5px auto 0;
+  padding: 2px 7px;
+  text-align: center;
+  width: fit-content;
+}
+
+// ---- minimap: whole-scene overview rail with a draggable viewport window ----
+.clip-trim__minimap {
+  background: #0c1218;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  height: 26px;
+  margin-top: 8px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+
+.clip-trim__minimap-frame {
+  bottom: 0;
+  opacity: 0.4;
+  position: absolute;
+  top: 0;
+}
+
+.clip-trim__minimap-sel {
+  background: linear-gradient(
+    135deg,
+    rgba(43, 149, 214, 0.55),
+    rgba(123, 97, 255, 0.6)
+  );
+  bottom: 0;
+  position: absolute;
+  top: 0;
+  z-index: 2;
+}
+
+.clip-trim__minimap-window {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 4px;
+  bottom: -1px;
+  cursor: grab;
+  min-width: 6px;
+  position: absolute;
+  top: -1px;
+  z-index: 3;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.clip-trim__minimap-edge {
+  bottom: 0;
+  cursor: ew-resize;
+  position: absolute;
+  top: 0;
+  width: 8px;
+  z-index: 4;
+
+  &::before {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 2px;
+    bottom: 6px;
+    content: "";
+    left: 50%;
+    position: absolute;
+    top: 6px;
+    transform: translateX(-50%);
+    width: 2px;
+  }
+
+  &--start {
+    left: -4px;
+  }
+
+  &--end {
+    right: -4px;
+  }
 }
 
 .clip-trim__controls {
