@@ -37,6 +37,7 @@ import {
   getPlayerPosition,
 } from "src/components/ScenePlayer/util";
 import {
+  faCamera,
   faEllipsisV,
   faChevronRight,
   faChevronLeft,
@@ -738,6 +739,18 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
                   organized={scene.organized}
                   onClick={onOrganizedClick}
                 />
+              </span>
+              <span>
+                <Button
+                  className="minimal"
+                  variant="secondary"
+                  title={`${intl.formatMessage({
+                    id: "actions.set_cover_from_current",
+                  })} (c c)`}
+                  onClick={() => onGenerateScreenshot(getPlayerPosition())}
+                >
+                  <Icon icon={faCamera} />
+                </Button>
               </span>
               <span>{renderOperations()}</span>
             </span>
