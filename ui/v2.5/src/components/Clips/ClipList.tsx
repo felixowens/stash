@@ -5,6 +5,8 @@ import { FormattedMessage, useIntl } from "react-intl";
 import Mousetrap from "mousetrap";
 import cx from "classnames";
 import { Button } from "react-bootstrap";
+import { faShuffle } from "@fortawesome/free-solid-svg-icons";
+import { Icon } from "../Shared/Icon";
 import * as GQL from "src/core/generated-graphql";
 import { queryFindClips, useFindClips } from "src/core/StashService";
 import { useFilteredItemList } from "../List/ItemList";
@@ -111,18 +113,34 @@ function usePlayRandom(filter: ListFilterModel, count: number) {
   return playRandom;
 }
 
+function useOpenFeed(filter: ListFilterModel) {
+  const history = useHistory();
+
+  return useCallback(() => {
+    // carry the current criteria/search into the feed; the feed imposes its
+    // own sort and pagination on top
+    const params = filter.makeQueryParameters();
+    history.push(`/clips/feed${params ? `?${params}` : ""}`);
+  }, [filter, history]);
+}
+
 function useAddKeybinds(filter: ListFilterModel, count: number) {
   const playRandom = usePlayRandom(filter, count);
+  const openFeed = useOpenFeed(filter);
 
   useEffect(() => {
     Mousetrap.bind("p r", () => {
       playRandom();
     });
+    Mousetrap.bind("p f", () => {
+      openFeed();
+    });
 
     return () => {
       Mousetrap.unbind("p r");
+      Mousetrap.unbind("p f");
     };
-  }, [playRandom]);
+  }, [playRandom, openFeed]);
 }
 
 const ClipsFilterSidebarSections = PatchContainerComponent(
@@ -320,6 +338,7 @@ export const FilteredClipList = PatchComponent(
     });
 
     const playRandom = usePlayRandom(effectiveFilter, totalCount);
+    const openFeed = useOpenFeed(filter);
 
     const convertedExtraOperations: IListFilterOperation[] =
       extraOperations.map((o) => ({
@@ -359,14 +378,26 @@ export const FilteredClipList = PatchComponent(
     if (sidebarStateLoading) return null;
 
     const operations = (
-      <ListOperations
-        items={items.length}
-        hasSelection={hasSelection}
-        operations={otherOperations}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        operationsMenuClassName="clip-list-operations-dropdown"
-      />
+      <>
+        <Button
+          className="clip-feed-launch"
+          variant="secondary"
+          onClick={openFeed}
+          disabled={totalCount === 0}
+          title={intl.formatMessage({ id: "clips_feed_launch_tooltip" })}
+        >
+          <Icon icon={faShuffle} />
+          <FormattedMessage id="clips_feed" />
+        </Button>
+        <ListOperations
+          items={items.length}
+          hasSelection={hasSelection}
+          operations={otherOperations}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          operationsMenuClassName="clip-list-operations-dropdown"
+        />
+      </>
     );
 
     return (
