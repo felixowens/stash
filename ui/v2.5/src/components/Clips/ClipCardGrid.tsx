@@ -20,7 +20,7 @@ export const ClipCardGrid: React.FC<IClipCardGrid> = PatchComponent(
 
     return (
       <div
-        className="clip-wall"
+        className="clip-card-grid"
         style={{ "--clip-tile-min": `${tileMin}px` } as React.CSSProperties}
       >
         {clips.map((clip) => (

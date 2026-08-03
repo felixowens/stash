@@ -5,7 +5,10 @@ import { FormattedMessage, useIntl } from "react-intl";
 import Mousetrap from "mousetrap";
 import cx from "classnames";
 import { Button } from "react-bootstrap";
-import { faShuffle } from "@fortawesome/free-solid-svg-icons";
+import {
+  faShuffle,
+  faTableCellsLarge,
+} from "@fortawesome/free-solid-svg-icons";
 import { Icon } from "../Shared/Icon";
 import * as GQL from "src/core/generated-graphql";
 import { queryFindClips, useFindClips } from "src/core/StashService";
@@ -113,20 +116,21 @@ function usePlayRandom(filter: ListFilterModel, count: number) {
   return playRandom;
 }
 
-function useOpenFeed(filter: ListFilterModel) {
+// both players carry the current criteria/search through and impose their own
+// sort and pagination on top
+function useOpenPlayer(filter: ListFilterModel, path: string) {
   const history = useHistory();
 
   return useCallback(() => {
-    // carry the current criteria/search into the feed; the feed imposes its
-    // own sort and pagination on top
     const params = filter.makeQueryParameters();
-    history.push(`/clips/feed${params ? `?${params}` : ""}`);
-  }, [filter, history]);
+    history.push(`${path}${params ? `?${params}` : ""}`);
+  }, [filter, history, path]);
 }
 
 function useAddKeybinds(filter: ListFilterModel, count: number) {
   const playRandom = usePlayRandom(filter, count);
-  const openFeed = useOpenFeed(filter);
+  const openFeed = useOpenPlayer(filter, "/clips/feed");
+  const openWall = useOpenPlayer(filter, "/clips/wall");
 
   useEffect(() => {
     Mousetrap.bind("p r", () => {
@@ -135,12 +139,16 @@ function useAddKeybinds(filter: ListFilterModel, count: number) {
     Mousetrap.bind("p f", () => {
       openFeed();
     });
+    Mousetrap.bind("p w", () => {
+      openWall();
+    });
 
     return () => {
       Mousetrap.unbind("p r");
       Mousetrap.unbind("p f");
+      Mousetrap.unbind("p w");
     };
-  }, [playRandom, openFeed]);
+  }, [playRandom, openFeed, openWall]);
 }
 
 const ClipsFilterSidebarSections = PatchContainerComponent(
@@ -338,7 +346,8 @@ export const FilteredClipList = PatchComponent(
     });
 
     const playRandom = usePlayRandom(effectiveFilter, totalCount);
-    const openFeed = useOpenFeed(filter);
+    const openFeed = useOpenPlayer(filter, "/clips/feed");
+    const openWall = useOpenPlayer(filter, "/clips/wall");
 
     const convertedExtraOperations: IListFilterOperation[] =
       extraOperations.map((o) => ({
@@ -388,6 +397,16 @@ export const FilteredClipList = PatchComponent(
         >
           <Icon icon={faShuffle} />
           <FormattedMessage id="clips_feed" />
+        </Button>
+        <Button
+          className="clip-wall-launch"
+          variant="secondary"
+          onClick={openWall}
+          disabled={totalCount === 0}
+          title={intl.formatMessage({ id: "clips_wall_launch_tooltip" })}
+        >
+          <Icon icon={faTableCellsLarge} />
+          <FormattedMessage id="clips_wall" />
         </Button>
         <ListOperations
           items={items.length}

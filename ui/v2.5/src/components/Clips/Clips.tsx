@@ -5,6 +5,7 @@ import { useTitleProps } from "src/hooks/title";
 import { FilteredClipList } from "./ClipList";
 import Clip from "./ClipDetails/Clip";
 import { ClipFeed } from "./ClipFeed";
+import { ClipWall } from "./ClipWall";
 import { View } from "../List/views";
 
 const Clips: React.FC = () => {
@@ -19,6 +20,7 @@ const ClipRoutes: React.FC = () => {
       <Switch>
         <Route exact path="/clips" component={Clips} />
         <Route exact path="/clips/feed" component={ClipFeed} />
+        <Route exact path="/clips/wall" component={ClipWall} />
         <Route path="/clips/:id" component={Clip} />
       </Switch>
     </>

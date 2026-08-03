@@ -1796,6 +1796,16 @@ export const useFindClips = (filter?: ListFilterModel) =>
     },
   });
 
+// the wall needs source dimensions to solve its layout, which SlimClipData
+// does not carry
+export const useFindClipsForWall = (filter: ListFilterModel) =>
+  GQL.useFindClipsForWallQuery({
+    variables: {
+      filter: filter.makeFindFilter(),
+      clip_filter: filter.makeFilter(),
+    },
+  });
+
 export const queryFindClips = (filter: ListFilterModel) =>
   client.query<GQL.FindClipsQuery>({
     query: GQL.FindClipsDocument,

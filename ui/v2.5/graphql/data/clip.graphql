@@ -81,6 +81,31 @@ fragment ClipData on Clip {
   updated_at
 }
 
+# the wall solves its layout from the source dimensions, which the slim
+# fragment does not carry; everything else it needs is the stream + poster
+fragment WallClipData on Clip {
+  id
+  title
+  start_seconds
+  end_seconds
+  paths {
+    # ClipPathsType has no id, so it is stored unnormalised under its parent —
+    # select the same fields as SlimClipData or the cache warns on merge
+    stream
+    preview
+    screenshot
+  }
+  scene {
+    id
+    title
+    files {
+      id
+      width
+      height
+    }
+  }
+}
+
 fragment SelectClipData on Clip {
   id
   title

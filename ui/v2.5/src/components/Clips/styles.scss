@@ -51,9 +51,9 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 }
 
 // ============================================================
-// Immersive mosaic wall
+// Clip card mosaic grid
 // ============================================================
-.clip-wall {
+.clip-card-grid {
   display: grid;
   gap: 7px;
   grid-template-columns: repeat(
@@ -1951,8 +1951,254 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   }
 }
 
-// the feed launch button sits beside the list operations button
-.clip-feed-launch.btn {
+// ============================================================
+// Wall — several clips at once, laid out from their aspect ratios
+// ============================================================
+
+.clip-wall {
+  background: #05080c;
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  position: fixed;
+  // above the main navbar
+  z-index: 1050;
+}
+
+.clip-wall__topbar {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(4, 7, 10, 0.82), rgba(4, 7, 10, 0));
+  display: flex;
+  justify-content: space-between;
+  left: 0;
+  padding: 12px 18px 26px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 30;
+
+  > .clip-wall__topbar-side {
+    pointer-events: auto;
+  }
+}
+
+.clip-wall__topbar-side {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.clip-wall__brand {
+  align-items: center;
+  color: #f5f8fa;
+  display: flex;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  letter-spacing: 0.2px;
+
+  svg {
+    color: $clip-accent-b;
+  }
+}
+
+.clip-wall__top-btn {
+  align-items: center;
+  background: rgba(20, 28, 36, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  color: #cdd7df;
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 36px;
+
+  &:hover {
+    background: rgba(38, 50, 62, 0.9);
+    color: #fff;
+  }
+}
+
+.clip-wall__controls {
+  align-items: center;
+  background: $clip-glass;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  display: flex;
+  gap: 10px;
+  padding: 5px 10px;
+
+  .btn {
+    font-weight: 600;
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: transparent;
+    color: #b9c6d2;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+  }
+}
+
+.clip-wall__interval {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  margin-bottom: 0;
+}
+
+.clip-wall__interval-value {
+  color: #9fb0bd;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 26px;
+  text-align: right;
+}
+
+input[type="range"].clip-wall__interval-range {
+  background: transparent;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  width: 96px;
+
+  &::-webkit-slider-thumb {
+    background-color: $clip-accent-b;
+  }
+
+  &::-moz-range-thumb {
+    background-color: $clip-accent-b;
+  }
+}
+
+// solved layout: slots are placed absolutely in % and glide between solves
+.clip-wall__stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.clip-wall__slot {
+  padding: 3px;
+  position: absolute;
+  transition: left 400ms ease, top 400ms ease, width 400ms ease,
+    height 400ms ease;
+}
+
+.clip-wall__cell {
+  background: #0b1016;
+  border-radius: 3px;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+
+  &.is-live {
+    box-shadow: inset 0 0 0 2px rgba(123, 97, 255, 0.9);
+  }
+}
+
+.clip-wall__layer {
+  height: 100%;
+  left: 0;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.clip-wall__layer--front {
+  animation: clip-wall-fade-in 400ms ease both;
+  z-index: 2;
+}
+
+.clip-wall__layer--back {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  z-index: 1;
+}
+
+// blur framing: two stacked copies of the same clip inside one crossfade
+// layer. The foreground is contained (nothing cropped) and the backdrop covers
+// and blurs, so the gap reads as an extension of the shot instead of dead
+// black.
+.clip-wall__media {
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.clip-wall__media--backdrop {
+  // scaled up so the blur kernel never pulls the cell's own edges inward
+  filter: blur(32px) brightness(0.65);
+  object-fit: cover;
+  transform: scale(1.15);
+  z-index: 1;
+}
+
+.clip-wall__media--foreground {
+  object-fit: contain;
+  z-index: 2;
+}
+
+@keyframes clip-wall-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.clip-wall__message {
+  align-items: center;
+  color: #7d8f9d;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  justify-content: center;
+  text-align: center;
+
+  svg {
+    color: #4a5b6a;
+    font-size: 40px;
+  }
+
+  p {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.clip-wall__message-btn {
+  background: $clip-accent;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 700;
+  padding: 9px 20px;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+// the feed and wall launch buttons sit beside the list operations button
+.clip-feed-launch.btn,
+.clip-wall-launch.btn {
   align-items: center;
   background: $clip-accent;
   border: none;
@@ -1979,11 +2225,18 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 }
 
 @media (max-width: 768px) {
-  .clip-feed__topbar {
+  .clip-feed__topbar,
+  .clip-wall__topbar {
     padding: 10px 12px 22px;
   }
 
-  .clip-feed__brand span {
+  .clip-feed__brand span,
+  .clip-wall__brand span {
+    display: none;
+  }
+
+  // no room for the slider once the button groups are in
+  .clip-wall__interval {
     display: none;
   }
 

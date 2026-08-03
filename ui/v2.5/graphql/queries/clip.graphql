@@ -13,6 +13,15 @@ query FindClip($id: ID!) {
   }
 }
 
+query FindClipsForWall($filter: FindFilterType, $clip_filter: ClipFilterType) {
+  findClips(clip_filter: $clip_filter, filter: $filter) {
+    count
+    clips {
+      ...WallClipData
+    }
+  }
+}
+
 query FindClipsForSelect(
   $filter: FindFilterType
   $clip_filter: ClipFilterType
