@@ -23,8 +23,10 @@ import {
   ClipWallControls,
   MAX_SWAP_MS,
   MIN_SWAP_MS,
+  WALL_ADVANCE_MODES,
   WALL_COUNTS,
   WALL_MODES,
+  WallAdvanceMode,
 } from "./ClipWallControls";
 import { solveWallLayout, WallFitMode } from "./wallLayout";
 
@@ -34,12 +36,22 @@ type WallClip = GQL.WallClipDataFragment;
 const POOL_SIZE = 200;
 const DEFAULT_COUNT = 4;
 const DEFAULT_MODE: WallFitMode = "blur";
+const DEFAULT_ADVANCE: WallAdvanceMode = "end";
 const DEFAULT_SWAP_MS = 8000;
 /** matches the crossfade in the stylesheet */
 const CROSSFADE_MS = 450;
+/** a clip that hasn't reported playing by now is shown regardless */
+const REVEAL_FALLBACK_MS = 5000;
+/** how many clips ahead of the queue to buffer */
+const WARM_AHEAD = 2;
+/** a foreground clip that neither ends nor makes progress for this long is stuck */
+const STALL_MS = 10000;
+/** chrome (and the cursor) go away after this much of nothing happening */
+const IDLE_MS = 3000;
 
 const COUNT_KEY = "clip-wall-count";
 const MODE_KEY = "clip-wall-mode";
+const ADVANCE_KEY = "clip-wall-advance";
 const SWAP_KEY = "clip-wall-swap-ms";
 
 function newSeed() {
@@ -77,6 +89,51 @@ function usePersistedSetting<T>(
   return [value, set];
 }
 
+// the wall is something you leave running, so every bit of floating chrome —
+// and the pointer itself — gets out of the way until you touch something
+function useIdle(delay: number) {
+  const [idle, setIdle] = useState(false);
+
+  useEffect(() => {
+    let timeout = 0;
+    const wake = () => {
+      // bail out of the render when we're already awake
+      setIdle((prev) => (prev ? false : prev));
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => setIdle(true), delay);
+    };
+
+    wake();
+    window.addEventListener("mousemove", wake);
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("mousemove", wake);
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, [delay]);
+
+  return idle;
+}
+
+// nobody is watching a background tab, and four decodes carrying on in one is
+// how a long session ends up out of media players
+function usePageVisible() {
+  const [visible, setVisible] = useState(
+    () => document.visibilityState !== "hidden"
+  );
+
+  useEffect(() => {
+    const onChange = () => setVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+
+  return visible;
+}
+
 // ------------------------------------------------------------
 // the clip queue — shuffled once, handed out one at a time
 // ------------------------------------------------------------
@@ -85,14 +142,18 @@ function useClipQueue(pool: readonly WallClip[]) {
   const queue = useRef({ order: [] as WallClip[], cursor: 0 });
   // bumped whenever the order is re-seeded, so the wall knows to refill
   const [generation, setGeneration] = useState(0);
+  // mirrors queue.cursor into render, so what's coming up can be warmed
+  const [cursor, setCursor] = useState(0);
 
   useEffect(() => {
     queue.current = { order: shuffle(pool), cursor: 0 };
+    setCursor(0);
     setGeneration((g) => g + 1);
   }, [pool]);
 
   const reshuffle = useCallback(() => {
     queue.current = { order: shuffle(queue.current.order), cursor: 0 };
+    setCursor(0);
     setGeneration((g) => g + 1);
   }, []);
 
@@ -104,10 +165,18 @@ function useClipQueue(pool: readonly WallClip[]) {
       q.order = shuffle(q.order);
       q.cursor = 0;
     }
-    return q.order[q.cursor++];
+    const clip = q.order[q.cursor++];
+    setCursor(q.cursor);
+    return clip;
   }, []);
 
-  return { take, reshuffle, generation, size: pool.length };
+  /** the next n clips, without consuming them; short near the end of a lap */
+  const peek = useCallback((n: number) => {
+    const q = queue.current;
+    return q.order.slice(q.cursor, q.cursor + n);
+  }, []);
+
+  return { take, peek, reshuffle, cursor, generation, size: pool.length };
 }
 
 // ------------------------------------------------------------
@@ -125,16 +194,17 @@ interface IWallCell {
 
 let tokenSeq = 1;
 
-function assign(
+/** pure: the token is minted by the caller so this is safe inside a setState */
+function place(
   cells: readonly (IWallCell | null)[],
   index: number,
-  clip: WallClip | undefined
-): IWallCell | null {
-  if (!clip) return cells[index] ?? null;
+  clip: WallClip,
+  token: number
+): IWallCell {
   const duplicates = cells.filter(
     (c, i) => i !== index && c?.clip.id === clip.id
   ).length;
-  return { clip, offset: duplicates * 1.3, token: tokenSeq++ };
+  return { clip, offset: duplicates * 1.3, token };
 }
 
 function fillCells(
@@ -143,7 +213,8 @@ function fillCells(
 ): IWallCell[] {
   const out: (IWallCell | null)[] = new Array(count).fill(null);
   for (let i = 0; i < count; i++) {
-    out[i] = assign(out, i, take());
+    const clip = take();
+    if (clip) out[i] = place(out, i, clip, tokenSeq++);
   }
   return out.filter((c): c is IWallCell => c !== null);
 }
@@ -161,11 +232,27 @@ interface IWallVideoProps {
   front: boolean;
   audible: boolean;
   /**
-   * blur mode: render a second, always-muted copy of the clip behind the
-   * foreground, cover-filling the cell and blurred, so a contained (uncropped)
-   * foreground never leaves dead black space
+   * blur mode: put the clip's still behind the foreground, cover-filling the
+   * cell and blurred, so a contained (uncropped) foreground never leaves dead
+   * black space. A still, not a second video: `paths.stream` is a
+   * source-resolution mp4, and a decode per cell just to blur it is how the
+   * wall used to eat a renderer alive.
    */
   backdrop: boolean;
+  /** timer mode holds a clip on screen past its end, so it has to repeat */
+  loop: boolean;
+  /** the tab is in the background — stop decoding until it comes back */
+  suspended: boolean;
+  /** this layer is the one on show; the other side of a swap sits at zero */
+  revealed: boolean;
+  /**
+   * on-end mode only, and only for the layer in front: this clip is finished
+   * with (played out, or broken) and the cell should take the next one. Fires
+   * at most once per mounted clip.
+   */
+  onDone?: () => void;
+  /** frames are actually rendering — fires once per mounted clip */
+  onPlaying?: () => void;
   onMetadata: (clipId: string, width: number, height: number) => void;
 }
 
@@ -174,15 +261,74 @@ const WallVideo: React.FC<IWallVideoProps> = ({
   front,
   audible,
   backdrop,
+  loop,
+  suspended,
+  revealed,
+  onDone,
+  onPlaying,
   onMetadata,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const backdropRef = useRef<HTMLVideoElement | null>(null);
+  const playedRef = useRef(false);
+
+  const doneRef = useRef(false);
+  const onDoneRef = useRef(onDone);
+  const stallRef = useRef(0);
+  const suspendedRef = useRef(suspended);
+  const armed = onDone !== undefined;
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
+  // read by the fuse, which is armed from an event handler and so can't see
+  // the prop: a pause queues one last timeupdate that lands after the effects
+  useEffect(() => {
+    suspendedRef.current = suspended;
+  }, [suspended]);
+
+  // exactly one hand-off per mounted clip, whichever trigger gets there first:
+  // two cells ending on the same frame each advance their own cell, and a clip
+  // that both errors and times out still only takes one from the queue
+  const finish = useCallback(() => {
+    if (doneRef.current || !onDoneRef.current) return;
+    doneRef.current = true;
+    window.clearTimeout(stallRef.current);
+    onDoneRef.current();
+  }, []);
+
+  // wedge guard: on-end advancement trusts the video to say when it's done, so
+  // a source that dies quietly — never loads, stalls forever — would park the
+  // cell for good. Any playback progress rearms the fuse, so a long clip that
+  // is simply still playing is never cut short.
+  const rearm = useCallback(() => {
+    if (doneRef.current || suspendedRef.current) return;
+    window.clearTimeout(stallRef.current);
+    stallRef.current = window.setTimeout(finish, STALL_MS);
+  }, [finish]);
+
+  // a suspended clip is paused, so it stops reporting progress — the fuse has
+  // to go on hold with it or it would advance the cell 10s into a hidden tab
+  useEffect(() => {
+    if (!armed || suspended) {
+      window.clearTimeout(stallRef.current);
+      return;
+    }
+    rearm();
+    return () => window.clearTimeout(stallRef.current);
+  }, [armed, rearm, suspended]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    if (suspended) {
+      video.pause();
+      return;
+    }
     video.muted = !audible;
+    // a clip that has already played out is the outgoing half of a swap: it is
+    // holding its last frame, and restarting it on resume would be a glitch
+    if (video.ended) return;
     const attempt = video.play();
     if (attempt) {
       attempt.catch(() => {
@@ -191,16 +337,20 @@ const WallVideo: React.FC<IWallVideoProps> = ({
         video.play().catch(() => {});
       });
     }
-  }, [audible]);
+  }, [audible, suspended]);
 
-  // the backdrop is decoration: muted forever, never asked for audio even when
-  // the cell is hover-unmuted
+  // Chrome hangs on to the decoder for a detached, un-paused media element
+  // until GC gets round to it, and a renderer only gets so many. Every swap
+  // mints a new element, so the cell hands its own back on the way out.
   useEffect(() => {
-    const video = backdropRef.current;
-    if (!video) return;
-    video.muted = true;
-    video.play().catch(() => {});
-  }, [backdrop]);
+    const video = videoRef.current;
+    return () => {
+      if (!video) return;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, []);
 
   function onLoadedMetadata() {
     const video = videoRef.current;
@@ -211,20 +361,28 @@ const WallVideo: React.FC<IWallVideoProps> = ({
     onMetadata(cell.clip.id, video.videoWidth, video.videoHeight);
   }
 
-  function onBackdropLoadedMetadata() {
-    const video = backdropRef.current;
-    if (!video) return;
-    // roughly in step with the foreground is plenty behind 32px of blur
-    video.currentTime = videoRef.current?.currentTime ?? cell.offset;
-    video.muted = true;
-    video.play().catch(() => {});
+  function handlePlaying() {
+    if (playedRef.current) return;
+    playedRef.current = true;
+    onPlaying?.();
   }
 
   const src = cell.clip.paths.stream ?? undefined;
   const layerClass = cx(
     "clip-wall__layer",
-    front ? "clip-wall__layer--front" : "clip-wall__layer--back"
+    front ? "clip-wall__layer--front" : "clip-wall__layer--back",
+    revealed && "is-revealed"
   );
+
+  // only the foreground drives the cell, and only when it is the layer in
+  // front — the copy fading out behind it has already handed over
+  const advanceProps = armed
+    ? {
+        onEnded: finish,
+        onError: finish,
+        onTimeUpdate: rearm,
+      }
+    : {};
 
   if (!backdrop) {
     return (
@@ -235,10 +393,12 @@ const WallVideo: React.FC<IWallVideoProps> = ({
         poster={cell.clip.paths.screenshot ?? undefined}
         muted={!audible}
         autoPlay
-        loop
+        loop={loop}
         playsInline
         preload="auto"
         onLoadedMetadata={onLoadedMetadata}
+        onPlaying={handlePlaying}
+        {...advanceProps}
       />
     );
   }
@@ -246,19 +406,15 @@ const WallVideo: React.FC<IWallVideoProps> = ({
   // the pair crossfades as one unit, so the wrapper carries the layer class
   return (
     <div className={layerClass}>
-      <video
-        ref={backdropRef}
-        className="clip-wall__media clip-wall__media--backdrop"
-        src={src}
-        muted
-        autoPlay
-        loop
-        playsInline
-        preload="auto"
-        aria-hidden="true"
-        tabIndex={-1}
-        onLoadedMetadata={onBackdropLoadedMetadata}
-      />
+      {cell.clip.paths.screenshot && (
+        <img
+          className="clip-wall__media clip-wall__media--backdrop"
+          src={cell.clip.paths.screenshot}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+      )}
       <video
         ref={videoRef}
         className="clip-wall__media clip-wall__media--foreground"
@@ -266,25 +422,77 @@ const WallVideo: React.FC<IWallVideoProps> = ({
         poster={cell.clip.paths.screenshot ?? undefined}
         muted={!audible}
         autoPlay
-        loop
+        loop={loop}
         playsInline
         preload="auto"
         onLoadedMetadata={onLoadedMetadata}
+        onPlaying={handlePlaying}
+        {...advanceProps}
       />
     </div>
+  );
+};
+
+/**
+ * An upcoming clip, loading quietly off-screen. It is never played — it exists
+ * so Chrome's media cache already holds the first chunk when the clip is
+ * promoted into a cell, which is what makes the swap look instant.
+ */
+const WarmVideo: React.FC<{ src?: string }> = ({ src }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    return () => {
+      if (!video) return;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      className="clip-wall__warmer"
+      src={src}
+      muted
+      playsInline
+      preload="auto"
+      aria-hidden="true"
+      tabIndex={-1}
+    />
   );
 };
 
 interface IWallCellProps {
   cell: IWallCell;
   blur: boolean;
+  loop: boolean;
+  suspended: boolean;
+  /** on-end mode: this cell's clip finished, give it the next one */
+  onDone?: () => void;
   onMetadata: (clipId: string, width: number, height: number) => void;
 }
 
-const WallCellView: React.FC<IWallCellProps> = ({ cell, blur, onMetadata }) => {
+const WallCellView: React.FC<IWallCellProps> = ({
+  cell,
+  blur,
+  loop,
+  suspended,
+  onDone,
+  onMetadata,
+}) => {
   const [hovered, setHovered] = useState(false);
   // the outgoing clip stays mounted for one crossfade
   const [layers, setLayers] = useState<IWallCell[]>([cell]);
+  // the incoming clip is invisible until it is genuinely rendering frames:
+  // these streams are source-resolution, and revealing on mount meant staring
+  // at a poster (or black) for a second or two while it buffered
+  const [readyToken, setReadyToken] = useState(0);
+
+  const front = layers[layers.length - 1];
+  const ready = readyToken === front.token;
 
   useEffect(() => {
     setLayers((prev) =>
@@ -294,14 +502,26 @@ const WallCellView: React.FC<IWallCellProps> = ({ cell, blur, onMetadata }) => {
     );
   }, [cell]);
 
+  // the old clip only goes once the new one has taken over on screen
   useEffect(() => {
-    if (layers.length < 2) return;
+    if (layers.length < 2 || !ready) return;
     const timeout = window.setTimeout(
       () => setLayers((prev) => prev.slice(-1)),
       CROSSFADE_MS
     );
     return () => window.clearTimeout(timeout);
-  }, [layers]);
+  }, [layers, ready]);
+
+  // ...but a clip that never reports playing can't hold the cell hostage. A
+  // suspended tab isn't a failure, so the fallback waits for it to come back.
+  useEffect(() => {
+    if (ready || suspended) return;
+    const timeout = window.setTimeout(
+      () => setReadyToken(front.token),
+      REVEAL_FALLBACK_MS
+    );
+    return () => window.clearTimeout(timeout);
+  }, [ready, suspended, front.token]);
 
   return (
     <div
@@ -309,16 +529,25 @@ const WallCellView: React.FC<IWallCellProps> = ({ cell, blur, onMetadata }) => {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {layers.map((layer, i) => (
-        <WallVideo
-          key={layer.token}
-          cell={layer}
-          front={i === layers.length - 1}
-          audible={hovered && i === layers.length - 1}
-          backdrop={blur}
-          onMetadata={onMetadata}
-        />
-      ))}
+      {layers.map((layer, i) => {
+        const isFront = i === layers.length - 1;
+        return (
+          <WallVideo
+            key={layer.token}
+            cell={layer}
+            front={isFront}
+            audible={hovered && isFront}
+            backdrop={blur}
+            loop={loop}
+            suspended={suspended}
+            // the outgoing clip holds the cell until the incoming one is up
+            revealed={isFront ? ready : !ready}
+            onDone={isFront ? onDone : undefined}
+            onPlaying={isFront ? () => setReadyToken(layer.token) : undefined}
+            onMetadata={onMetadata}
+          />
+        );
+      })}
     </div>
   );
 };
@@ -339,6 +568,11 @@ export const ClipWall: React.FC = () => {
   );
   const [mode, setMode] = usePersistedSetting(MODE_KEY, DEFAULT_MODE, (raw) =>
     WALL_MODES.find((m) => m === raw)
+  );
+  const [advance, setAdvance] = usePersistedSetting(
+    ADVANCE_KEY,
+    DEFAULT_ADVANCE,
+    (raw) => WALL_ADVANCE_MODES.find((a) => a === raw)
   );
   const [swapMs, setSwapMs] = usePersistedSetting(
     SWAP_KEY,
@@ -366,9 +600,14 @@ export const ClipWall: React.FC = () => {
   const { data, loading } = useFindClipsForWall(filter);
   const pool = useMemo(() => data?.findClips.clips ?? [], [data]);
 
-  const { take, reshuffle, generation, size } = useClipQueue(pool);
+  const { take, peek, reshuffle, cursor, generation, size } =
+    useClipQueue(pool);
   // a pool smaller than the chosen count shows what exists rather than clones
   const cellCount = Math.min(count, size);
+
+  // shortcuts and hover-unmute carry on working while the chrome is away
+  const idle = useIdle(IDLE_MS);
+  const visible = usePageVisible();
 
   const [cells, setCells] = useState<IWallCell[]>([]);
   const [measured, setMeasured] = useState<Record<string, number>>({});
@@ -394,21 +633,37 @@ export const ClipWall: React.FC = () => {
     setCells(fillCells(cellCount, take));
   }, [cellCount, take, generation]);
 
-  // one cell at a time, round-robin: a cell holds for a full lap of the wall,
-  // and the changes land staggered rather than in lockstep
+  // hand one cell the next clip off the queue. Both triggers come through
+  // here, and the clip is taken before the state update so a cell can't
+  // consume two, nor two cells the same one, whatever order they land in
+  const advanceCell = useCallback(
+    (index: number) => {
+      const clip = take();
+      if (!clip) return;
+      const token = tokenSeq++;
+      setCells((prev) =>
+        index < prev.length
+          ? prev.map((cell, i) =>
+              i === index ? place(prev, index, clip, token) : cell
+            )
+          : prev
+      );
+    },
+    [take]
+  );
+
+  // timer mode: one cell at a time, round-robin, so a cell holds for a full lap
+  // of the wall and the changes land staggered rather than in lockstep. It
+  // stops with the tab, like the clips do; on-end mode has no timer at all.
   useEffect(() => {
+    if (advance !== "timer" || cellCount === 0 || !visible) return;
     const id = window.setInterval(() => {
-      setCells((prev) => {
-        if (prev.length === 0) return prev;
-        const i = rotation.current % prev.length;
-        rotation.current = i + 1;
-        const next = [...prev];
-        next[i] = assign(next, i, take()) ?? next[i];
-        return next;
-      });
+      const i = rotation.current % cellCount;
+      rotation.current = i + 1;
+      advanceCell(i);
     }, swapMs);
     return () => window.clearInterval(id);
-  }, [take, swapMs]);
+  }, [advance, advanceCell, cellCount, swapMs, visible]);
 
   const onMetadata = useCallback(
     (clipId: string, width: number, height: number) => {
@@ -438,9 +693,16 @@ export const ClipWall: React.FC = () => {
   const layout = solveWallLayout(aspects, containerAspect, mode);
 
   const empty = !loading && pool.length === 0;
+  // recomputed every time the queue moves; keyed by clip id below, so a clip
+  // still coming up keeps the element it has already been buffering into
+  const upcoming = useMemo(
+    () => peek(WARM_AHEAD),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [peek, cursor, generation]
+  );
 
   return (
-    <div className="clip-wall">
+    <div className={cx("clip-wall", { "is-idle": idle })}>
       <div className="clip-wall__topbar">
         <div className="clip-wall__topbar-side">
           <button
@@ -465,6 +727,8 @@ export const ClipWall: React.FC = () => {
             onSetCount={setCount}
             mode={mode}
             onSetMode={setMode}
+            advance={advance}
+            onSetAdvance={setAdvance}
             swapMs={swapMs}
             onSetSwapMs={setSwapMs}
             onReshuffle={reshuffle}
@@ -493,6 +757,9 @@ export const ClipWall: React.FC = () => {
               <WallCellView
                 cell={cell}
                 blur={mode === "blur"}
+                loop={advance === "timer"}
+                suspended={!visible}
+                onDone={advance === "end" ? () => advanceCell(i) : undefined}
                 onMetadata={onMetadata}
               />
             </div>
@@ -504,6 +771,12 @@ export const ClipWall: React.FC = () => {
             <LoadingIndicator />
           </div>
         )}
+
+        <div className="clip-wall__warmers" aria-hidden="true">
+          {upcoming.map((clip) => (
+            <WarmVideo key={clip.id} src={clip.paths.stream ?? undefined} />
+          ))}
+        </div>
 
         {empty && (
           <div className="clip-wall__message">

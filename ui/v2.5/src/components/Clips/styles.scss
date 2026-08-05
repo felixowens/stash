@@ -1971,15 +1971,32 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   display: flex;
   justify-content: space-between;
   left: 0;
+  opacity: 1;
   padding: 12px 18px 26px;
   pointer-events: none;
   position: absolute;
   right: 0;
   top: 0;
+  transition: opacity 0.3s ease;
   z-index: 30;
 
   > .clip-wall__topbar-side {
     pointer-events: auto;
+  }
+}
+
+// left alone for a few seconds the wall becomes just the clips: every bit of
+// chrome fades out and the pointer goes with it. Hidden chrome must not eat
+// the hover that unmutes a cell underneath it.
+.clip-wall.is-idle {
+  cursor: none;
+
+  .clip-wall__topbar {
+    opacity: 0;
+
+    > .clip-wall__topbar-side {
+      pointer-events: none;
+    }
   }
 }
 
@@ -2106,24 +2123,42 @@ input[type="range"].clip-wall__interval-range {
   }
 }
 
+// a layer is only shown once its clip is genuinely rendering frames, which is
+// what `is-revealed` means. The outgoing layer keeps its last frame up until
+// then, so a swap never flashes black while the new stream buffers.
 .clip-wall__layer {
   height: 100%;
   left: 0;
   object-fit: cover;
+  opacity: 0;
   position: absolute;
   top: 0;
+  transition: opacity 400ms ease;
   width: 100%;
+
+  &.is-revealed {
+    opacity: 1;
+  }
 }
 
 .clip-wall__layer--front {
-  animation: clip-wall-fade-in 400ms ease both;
   z-index: 2;
 }
 
 .clip-wall__layer--back {
-  opacity: 0;
-  transition: opacity 400ms ease;
   z-index: 1;
+}
+
+// upcoming clips buffer here: present enough to load, too small to see
+.clip-wall__warmers {
+  height: 1px;
+  left: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 1px;
 }
 
 // blur framing: two stacked copies of the same clip inside one crossfade
@@ -2149,16 +2184,6 @@ input[type="range"].clip-wall__interval-range {
 .clip-wall__media--foreground {
   object-fit: contain;
   z-index: 2;
-}
-
-@keyframes clip-wall-fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
 }
 
 .clip-wall__message {

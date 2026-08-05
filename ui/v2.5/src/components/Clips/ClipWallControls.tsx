@@ -8,6 +8,11 @@ import { WallFitMode } from "./wallLayout";
 /** how many clips can be on the wall at once */
 export const WALL_COUNTS = [2, 3, 4];
 export const WALL_MODES: WallFitMode[] = ["fill", "fit", "blur"];
+
+/** what moves a cell on: the clip running out, or the clock */
+export type WallAdvanceMode = "end" | "timer";
+export const WALL_ADVANCE_MODES: WallAdvanceMode[] = ["end", "timer"];
+
 export const MIN_SWAP_MS = 3000;
 export const MAX_SWAP_MS = 20000;
 
@@ -17,11 +22,18 @@ const MODE_LABELS: Record<WallFitMode, string> = {
   blur: "clips_wall_blur",
 };
 
+const ADVANCE_LABELS: Record<WallAdvanceMode, string> = {
+  end: "clips_wall_advance_end",
+  timer: "clips_wall_advance_timer",
+};
+
 interface IClipWallControlsProps {
   count: number;
   onSetCount: (count: number) => void;
   mode: WallFitMode;
   onSetMode: (mode: WallFitMode) => void;
+  advance: WallAdvanceMode;
+  onSetAdvance: (advance: WallAdvanceMode) => void;
   swapMs: number;
   onSetSwapMs: (swapMs: number) => void;
   onReshuffle: () => void;
@@ -32,6 +44,8 @@ export const ClipWallControls: React.FC<IClipWallControlsProps> = ({
   onSetCount,
   mode,
   onSetMode,
+  advance,
+  onSetAdvance,
   swapMs,
   onSetSwapMs,
   onReshuffle,
@@ -73,21 +87,40 @@ export const ClipWallControls: React.FC<IClipWallControlsProps> = ({
         ))}
       </ButtonGroup>
 
-      <label className="clip-wall__interval">
-        <span className="clip-wall__interval-value">
-          {intl.formatMessage({ id: "clips_wall_swap_seconds" }, { seconds })}
-        </span>
-        <Form.Control
-          type="range"
-          className="clip-wall__interval-range"
-          min={MIN_SWAP_MS}
-          max={MAX_SWAP_MS}
-          step={500}
-          value={swapMs}
-          onChange={(e) => onSetSwapMs(Number(e.currentTarget.value))}
-          title={intl.formatMessage({ id: "clips_wall_swap_interval" })}
-        />
-      </label>
+      <ButtonGroup
+        size="sm"
+        aria-label={intl.formatMessage({ id: "clips_wall_advance" })}
+      >
+        {WALL_ADVANCE_MODES.map((a) => (
+          <Button
+            key={a}
+            variant={a === advance ? "primary" : "secondary"}
+            onClick={() => onSetAdvance(a)}
+            title={intl.formatMessage({ id: "clips_wall_advance" })}
+          >
+            {intl.formatMessage({ id: ADVANCE_LABELS[a] })}
+          </Button>
+        ))}
+      </ButtonGroup>
+
+      {/* the interval only means anything to the timer, so it only shows there */}
+      {advance === "timer" && (
+        <label className="clip-wall__interval">
+          <span className="clip-wall__interval-value">
+            {intl.formatMessage({ id: "clips_wall_swap_seconds" }, { seconds })}
+          </span>
+          <Form.Control
+            type="range"
+            className="clip-wall__interval-range"
+            min={MIN_SWAP_MS}
+            max={MAX_SWAP_MS}
+            step={500}
+            value={swapMs}
+            onChange={(e) => onSetSwapMs(Number(e.currentTarget.value))}
+            title={intl.formatMessage({ id: "clips_wall_swap_interval" })}
+          />
+        </label>
+      )}
 
       <Button
         size="sm"
