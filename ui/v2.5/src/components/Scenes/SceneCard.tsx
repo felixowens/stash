@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Button, ButtonGroup, OverlayTrigger, Tooltip } from "react-bootstrap";
 import { useHistory } from "react-router-dom";
 import cx from "classnames";
@@ -43,6 +43,11 @@ interface IScenePreviewProps {
   disabled?: boolean;
 }
 
+// Delay before a hovered card starts fetching its preview video. Matches the
+// CSS reveal transition-delay so that scrolling the cursor past a card never
+// costs a fetch + demux + decoder init on the critical path.
+const previewHoverDelay = 120;
+
 export const ScenePreview: React.FC<IScenePreviewProps> = ({
   image,
   video,
@@ -54,27 +59,73 @@ export const ScenePreview: React.FC<IScenePreviewProps> = ({
   volume,
 }) => {
   const videoEl = useRef<HTMLVideoElement>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // The <video> is mounted without a src and stays inert until the pointer
+  // dwells on the card: a grid of hundreds of src-less videos is free, but a
+  // grid of hundreds of loading ones is not.
+  const startPreview = useCallback(() => {
+    const videoTag = videoEl.current;
+    if (!videoTag || !video) return;
+
+    if (videoTag.getAttribute("src") !== video) {
+      videoTag.setAttribute("src", video);
+    }
+    videoTag.volume = soundActive ? (volume ?? 0) / 100 : 0;
+    // Catch is necessary due to DOMException if user hovers before clicking on page
+    videoTag.play()?.catch(() => {});
+  }, [video, soundActive, volume]);
+
+  // Drop the src and reload so the media element releases its decoder and
+  // network resources, rather than accumulating one per card browsed past.
+  const releasePreview = useCallback(() => {
+    const videoTag = videoEl.current;
+    if (!videoTag || !videoTag.getAttribute("src")) return;
+
+    videoTag.pause();
+    videoTag.removeAttribute("src");
+    videoTag.load();
+  }, []);
+
+  const cancelHover = useCallback(() => {
+    if (hoverTimer.current !== undefined) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = undefined;
+    }
+  }, []);
+
+  function onPointerEnter(event: React.PointerEvent) {
+    // Touch has no hover, so touch devices never load previews.
+    if (event.pointerType === "touch" || !video) return;
+
+    cancelHover();
+    hoverTimer.current = setTimeout(startPreview, previewHoverDelay);
+  }
+
+  function onPointerLeave() {
+    cancelHover();
+    releasePreview();
+  }
 
   useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.intersectionRatio > 0)
-          // Catch is necessary due to DOMException if user hovers before clicking on page
-          videoEl.current?.play()?.catch(() => {});
-        else videoEl.current?.pause();
-      });
-    });
-
-    if (videoEl.current) observer.observe(videoEl.current);
-  });
+    return () => {
+      cancelHover();
+      releasePreview();
+    };
+  }, [cancelHover, releasePreview]);
 
   useEffect(() => {
-    if (videoEl?.current?.volume)
+    if (videoEl.current) {
       videoEl.current.volume = soundActive ? (volume ?? 0) / 100 : 0;
+    }
   }, [volume, soundActive]);
 
   return (
-    <div className={cx("scene-card-preview", { portrait: isPortrait })}>
+    <div
+      className={cx("scene-card-preview", { portrait: isPortrait })}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
       <img
         className="scene-card-preview-image"
         loading="lazy"
@@ -82,6 +133,10 @@ export const ScenePreview: React.FC<IScenePreviewProps> = ({
         alt=""
       />
       <video
+        // Decorative, like the poster image above it — and while it sits
+        // src-less it would otherwise announce itself as "Unable to play
+        // media.", becoming the card link's accessible name.
+        aria-hidden="true"
         disableRemotePlayback
         playsInline
         muted={!soundActive}
@@ -89,7 +144,6 @@ export const ScenePreview: React.FC<IScenePreviewProps> = ({
         loop
         preload="none"
         ref={videoEl}
-        src={video}
       />
       <PreviewScrubber
         vttPath={vttPath}

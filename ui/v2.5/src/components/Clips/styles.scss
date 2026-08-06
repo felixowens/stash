@@ -136,10 +136,11 @@ $clip-glass: rgba(10, 14, 18, 0.62);
       width: 100%;
     }
 
-    // The preview <video> auto-plays whenever the card scrolls into view (the
-    // IntersectionObserver in ScenePreview), but stays parked off-screen until
-    // hover. Scene cards get this reveal from a `.scene-card:hover` rule that
-    // never matches us (we're a `.clip-card`), so re-create it here.
+    // ScenePreview loads and plays the preview <video> once the pointer has
+    // dwelled on the card; the element stays parked off-screen until then.
+    // Scene cards get this reveal from a `.scene-card:hover` rule that never
+    // matches us (we're a `.clip-card`), so re-create it here. The delay must
+    // stay in step with `previewHoverDelay` in SceneCard.tsx.
     .scene-card-preview-video {
       top: -9999px;
       transition: top 0s;
