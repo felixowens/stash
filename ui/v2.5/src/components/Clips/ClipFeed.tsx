@@ -12,6 +12,8 @@ import Mousetrap from "mousetrap";
 import {
   faBox,
   faClock,
+  faEye,
+  faEyeSlash,
   faFilm,
   faForwardStep,
   faPlay,
@@ -46,9 +48,12 @@ const MOUNT_RADIUS = 3;
 // items within this distance mount a real <video> (preloaded, gapless swipes)
 const VIDEO_RADIUS = 1;
 const DOUBLE_TAP_MS = 280;
+/** how long "press h or tap the eye" lingers after entering clean mode */
+const CLEAN_HINT_MS = 2000;
 
 const MUTED_KEY = "clip-feed-muted";
 const AUTO_ADVANCE_KEY = "clip-feed-auto-advance";
+const CLEAN_KEY = "clip-feed-clean";
 
 type FeedOrder = "shuffle" | "newest";
 
@@ -332,6 +337,9 @@ const FeedItem: React.FC<IFeedItemProps> = ({
             </button>
           )}
 
+          {/* the one piece of chrome that survives clean mode */}
+          <div className="clip-feed__clean-title">{clipTitle(clip)}</div>
+
           <div className="clip-feed__info">
             <Link className="clip-feed__title" to={`/clips/${clip.id}`}>
               {clipTitle(clip)}
@@ -473,6 +481,24 @@ export const ClipFeed: React.FC = () => {
     () => localStorage.getItem(AUTO_ADVANCE_KEY) !== "0"
   );
 
+  // clean mode is only ever asked for — nothing times out into it, and nothing
+  // but `h` or the eye buttons takes it away, so scrolling and tapping the
+  // video keep working with the chrome gone
+  const [clean, setClean] = useState(
+    () => localStorage.getItem(CLEAN_KEY) === "1"
+  );
+
+  const [cleanHint, setCleanHint] = useState(false);
+  useEffect(() => {
+    if (!clean) {
+      setCleanHint(false);
+      return;
+    }
+    setCleanHint(true);
+    const timeout = window.setTimeout(() => setCleanHint(false), CLEAN_HINT_MS);
+    return () => window.clearTimeout(timeout);
+  }, [clean]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRegistry = useRef(new Map<number, HTMLVideoElement>());
   const pageRef = useRef(0);
@@ -489,6 +515,11 @@ export const ClipFeed: React.FC = () => {
   const setAutoAdvancePersistent = useCallback((value: boolean) => {
     setAutoAdvance(value);
     localStorage.setItem(AUTO_ADVANCE_KEY, value ? "1" : "0");
+  }, []);
+
+  const setCleanPersistent = useCallback((value: boolean) => {
+    setClean(value);
+    localStorage.setItem(CLEAN_KEY, value ? "1" : "0");
   }, []);
 
   const makeFilter = useCallback(
@@ -657,6 +688,10 @@ export const ClipFeed: React.FC = () => {
     Mousetrap.bind("m", () => setMutedPersistent(!muted));
     Mousetrap.bind("s", () => reshuffle());
     Mousetrap.bind("esc", () => exitFeed());
+    Mousetrap.bind("h", () => {
+      setCleanPersistent(!clean);
+      return false;
+    });
 
     return () => {
       Mousetrap.unbind(["down", "j"]);
@@ -666,6 +701,7 @@ export const ClipFeed: React.FC = () => {
       Mousetrap.unbind("m");
       Mousetrap.unbind("s");
       Mousetrap.unbind("esc");
+      Mousetrap.unbind("h");
     };
   }, [
     activeIndex,
@@ -674,6 +710,8 @@ export const ClipFeed: React.FC = () => {
     setMutedPersistent,
     reshuffle,
     exitFeed,
+    clean,
+    setCleanPersistent,
   ]);
 
   const loadedInitial = total !== undefined;
@@ -685,7 +723,7 @@ export const ClipFeed: React.FC = () => {
   }, [loadedInitial, clips.length, activeIndex, total]);
 
   return (
-    <div className="clip-feed">
+    <div className={cx("clip-feed", { "is-clean": clean })}>
       <div className="clip-feed__topbar">
         <div className="clip-feed__topbar-side">
           <button
@@ -736,6 +774,15 @@ export const ClipFeed: React.FC = () => {
             <Icon icon={faClock} />
           </button>
           <span className="clip-feed__top-divider" />
+          {/* discoverable twin of the `h` shortcut */}
+          <button
+            type="button"
+            className="clip-feed__top-btn"
+            onClick={() => setCleanPersistent(true)}
+            title={intl.formatMessage({ id: "clips_feed_hide_ui" })}
+          >
+            <Icon icon={faEyeSlash} />
+          </button>
           <button
             type="button"
             className={cx("clip-feed__top-btn", { "is-active": autoAdvance })}
@@ -798,6 +845,24 @@ export const ClipFeed: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* the only way back out of clean mode without a keyboard */}
+      {clean && (
+        <button
+          type="button"
+          className="clip-feed__clean-eye"
+          onClick={() => setCleanPersistent(false)}
+          title={intl.formatMessage({ id: "clips_feed_show_ui" })}
+        >
+          <Icon icon={faEye} />
+        </button>
+      )}
+
+      {cleanHint && (
+        <div className="clip-feed__clean-hint">
+          <FormattedMessage id="clips_feed_clean_hint" />
+        </div>
+      )}
     </div>
   );
 };

@@ -29,6 +29,7 @@ import {
   WallAdvanceMode,
 } from "./ClipWallControls";
 import { solveWallLayout, WallFitMode } from "./wallLayout";
+import { useEdgeReveal } from "./useEdgeReveal";
 
 type WallClip = GQL.WallClipDataFragment;
 
@@ -46,8 +47,12 @@ const REVEAL_FALLBACK_MS = 5000;
 const WARM_AHEAD = 2;
 /** a foreground clip that neither ends nor makes progress for this long is stuck */
 const STALL_MS = 10000;
-/** chrome (and the cursor) go away after this much of nothing happening */
-const IDLE_MS = 3000;
+/** how close to the top edge the cursor (or a tap) has to get to summon the bar */
+const EDGE_PX = 80;
+/** settle time after leaving the edge zone, so the bar isn't twitchy */
+const EDGE_GRACE_MS = 300;
+/** how long a keypress or a tap in the band holds the bar open */
+const EDGE_HOLD_MS = 3000;
 
 const COUNT_KEY = "clip-wall-count";
 const MODE_KEY = "clip-wall-mode";
@@ -87,35 +92,6 @@ function usePersistedSetting<T>(
   );
 
   return [value, set];
-}
-
-// the wall is something you leave running, so every bit of floating chrome —
-// and the pointer itself — gets out of the way until you touch something
-function useIdle(delay: number) {
-  const [idle, setIdle] = useState(false);
-
-  useEffect(() => {
-    let timeout = 0;
-    const wake = () => {
-      // bail out of the render when we're already awake
-      setIdle((prev) => (prev ? false : prev));
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(() => setIdle(true), delay);
-    };
-
-    wake();
-    window.addEventListener("mousemove", wake);
-    window.addEventListener("pointerdown", wake);
-    window.addEventListener("keydown", wake);
-    return () => {
-      window.clearTimeout(timeout);
-      window.removeEventListener("mousemove", wake);
-      window.removeEventListener("pointerdown", wake);
-      window.removeEventListener("keydown", wake);
-    };
-  }, [delay]);
-
-  return idle;
 }
 
 // nobody is watching a background tab, and four decodes carrying on in one is
@@ -605,8 +581,16 @@ export const ClipWall: React.FC = () => {
   // a pool smaller than the chosen count shows what exists rather than clones
   const cellCount = Math.min(count, size);
 
-  // shortcuts and hover-unmute carry on working while the chrome is away
-  const idle = useIdle(IDLE_MS);
+  // the wall is just the clips until you reach for the top edge; shortcuts and
+  // hover-unmute carry on working while the chrome is away
+  const topbarRef = useRef<HTMLDivElement>(null);
+  const chromeRevealed = useEdgeReveal(
+    EDGE_PX,
+    EDGE_GRACE_MS,
+    EDGE_HOLD_MS,
+    topbarRef
+  );
+
   const visible = usePageVisible();
 
   const [cells, setCells] = useState<IWallCell[]>([]);
@@ -702,8 +686,8 @@ export const ClipWall: React.FC = () => {
   );
 
   return (
-    <div className={cx("clip-wall", { "is-idle": idle })}>
-      <div className="clip-wall__topbar">
+    <div className={cx("clip-wall", { "is-chrome-hidden": !chromeRevealed })}>
+      <div className="clip-wall__topbar" ref={topbarRef}>
         <div className="clip-wall__topbar-side">
           <button
             type="button"

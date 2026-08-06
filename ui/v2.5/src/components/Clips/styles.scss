@@ -1462,6 +1462,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   position: absolute;
   right: 0;
   top: 0;
+  transition: opacity 0.3s ease;
   z-index: 30;
 
   > .clip-feed__topbar-side {
@@ -1656,6 +1657,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   padding: 8px 16px;
   position: absolute;
   transform: translateX(-50%);
+  transition: opacity 0.3s ease;
   z-index: 20;
 
   &:hover {
@@ -1671,6 +1673,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   left: 22px;
   max-width: min(560px, calc(100% - 120px));
   position: absolute;
+  transition: opacity 0.3s ease;
   z-index: 10;
 }
 
@@ -1818,6 +1821,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   gap: 16px;
   position: absolute;
   right: 18px;
+  transition: opacity 0.3s ease;
   z-index: 10;
 }
 
@@ -1951,6 +1955,128 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   }
 }
 
+// ---- clean mode ----
+// `h` or the eye button strips the feed back to the clip. All that survives is
+// a one-line title, the progress bar collapsed to a sliver, and a ghost eye to
+// get back out with — the only route back on a phone, so it stays reachable
+// above the home indicator without covering the title.
+
+.clip-feed__clean-title {
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  color: rgba(245, 248, 250, 0.72);
+  font-size: 13px;
+  font-weight: 600;
+  left: 22px;
+  max-width: calc(100% - 84px);
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+  z-index: 12;
+}
+
+.clip-feed__clean-eye {
+  align-items: center;
+  background: rgba(20, 28, 36, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  color: #cdd7df;
+  cursor: pointer;
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  opacity: 0.35;
+  padding: 0;
+  position: absolute;
+  right: 16px;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  width: 40px;
+  z-index: 25;
+
+  &:hover,
+  &:focus-visible {
+    color: #fff;
+    opacity: 1;
+  }
+}
+
+.clip-feed__clean-hint {
+  animation: clip-feed-clean-hint 2s ease forwards;
+  background: rgba(8, 12, 16, 0.72);
+  border-radius: 999px;
+  color: #cdd7df;
+  font-size: 12px;
+  font-weight: 700;
+  left: 50%;
+  letter-spacing: 0.4px;
+  padding: 6px 14px;
+  pointer-events: none;
+  position: absolute;
+  top: 24px;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+
+@keyframes clip-feed-clean-hint {
+  0% {
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+.clip-feed.is-clean {
+  cursor: none;
+
+  .clip-feed__topbar,
+  .clip-feed__info,
+  .clip-feed__rail,
+  .clip-feed__unmute-pill {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  // hidden chrome must not eat the taps that play/pause the clip underneath
+  > .clip-feed__topbar > .clip-feed__topbar-side {
+    pointer-events: none;
+  }
+
+  .clip-feed__clean-title {
+    opacity: 1;
+  }
+
+  // the scrub bar collapses to a sliver you can read but not grab
+  .clip-feed__progress {
+    cursor: none;
+    height: 2px;
+    padding-top: 0;
+    pointer-events: none;
+
+    &::before {
+      height: 2px;
+    }
+  }
+
+  .clip-feed__progress-fill {
+    height: 2px;
+  }
+}
+
 // ============================================================
 // Wall — several clips at once, laid out from their aspect ratios
 // ============================================================
@@ -1985,10 +2111,10 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   }
 }
 
-// left alone for a few seconds the wall becomes just the clips: every bit of
-// chrome fades out and the pointer goes with it. Hidden chrome must not eat
-// the hover that unmutes a cell underneath it.
-.clip-wall.is-idle {
+// by default the wall is just the clips: the chrome is faded out and the
+// pointer goes with it until you reach for the top edge. Hidden chrome must
+// not eat the hover that unmutes a cell underneath it.
+.clip-wall.is-chrome-hidden {
   cursor: none;
 
   .clip-wall__topbar {
@@ -2283,5 +2409,15 @@ input[type="range"].clip-wall__interval-range {
   .clip-feed__rail-btn {
     height: 46px;
     width: 46px;
+  }
+
+  .clip-feed__clean-title {
+    font-size: 12px;
+    left: 14px;
+    max-width: calc(100% - 76px);
+  }
+
+  .clip-feed__clean-eye {
+    right: 10px;
   }
 }
