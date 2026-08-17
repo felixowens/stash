@@ -962,6 +962,8 @@
   "clips_wall_advance": "Swap when",
   "clips_wall_advance_end": "On end",
   "clips_wall_advance_timer": "Timer",
+  "clips_wall_audio_all": "Enable audio on all wall clips",
+  "clips_wall_audio_hover": "Use hover audio",
   "clips_wall_back_to_clips": "Back to clips",
   "clips_wall_blur": "Blur",
   "clips_wall_count": "Clips on screen",

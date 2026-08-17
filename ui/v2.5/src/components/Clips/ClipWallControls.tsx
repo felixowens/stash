@@ -1,7 +1,11 @@
 import React from "react";
 import { Button, ButtonGroup, Form } from "react-bootstrap";
 import { useIntl } from "react-intl";
-import { faShuffle } from "@fortawesome/free-solid-svg-icons";
+import {
+  faShuffle,
+  faVolumeHigh,
+  faVolumeXmark,
+} from "@fortawesome/free-solid-svg-icons";
 import { Icon } from "../Shared/Icon";
 import { WallFitMode } from "./wallLayout";
 
@@ -36,6 +40,8 @@ interface IClipWallControlsProps {
   onSetAdvance: (advance: WallAdvanceMode) => void;
   swapMs: number;
   onSetSwapMs: (swapMs: number) => void;
+  allAudio: boolean;
+  onSetAllAudio: (allAudio: boolean) => void;
   onReshuffle: () => void;
 }
 
@@ -48,6 +54,8 @@ export const ClipWallControls: React.FC<IClipWallControlsProps> = ({
   onSetAdvance,
   swapMs,
   onSetSwapMs,
+  allAudio,
+  onSetAllAudio,
   onReshuffle,
 }) => {
   const intl = useIntl();
@@ -121,6 +129,18 @@ export const ClipWallControls: React.FC<IClipWallControlsProps> = ({
           />
         </label>
       )}
+
+      <Button
+        size="sm"
+        variant={allAudio ? "primary" : "secondary"}
+        aria-pressed={allAudio}
+        onClick={() => onSetAllAudio(!allAudio)}
+        title={intl.formatMessage({
+          id: allAudio ? "clips_wall_audio_hover" : "clips_wall_audio_all",
+        })}
+      >
+        <Icon icon={allAudio ? faVolumeHigh : faVolumeXmark} />
+      </Button>
 
       <Button
         size="sm"

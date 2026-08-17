@@ -470,6 +470,7 @@ interface IWallCellProps {
   blur: boolean;
   loop: boolean;
   suspended: boolean;
+  allAudio: boolean;
   /** on-end mode: this cell's clip finished, give it the next one */
   onDone?: () => void;
   onMetadata: (clipId: string, width: number, height: number) => void;
@@ -480,6 +481,7 @@ const WallCellView: React.FC<IWallCellProps> = ({
   blur,
   loop,
   suspended,
+  allAudio,
   onDone,
   onMetadata,
 }) => {
@@ -536,7 +538,7 @@ const WallCellView: React.FC<IWallCellProps> = ({
             key={layer.token}
             cell={layer}
             front={isFront}
-            audible={hovered && isFront}
+            audible={isFront && (allAudio || hovered)}
             backdrop={blur}
             loop={loop}
             suspended={suspended}
@@ -583,6 +585,9 @@ export const ClipWall: React.FC = () => {
       return Math.min(MAX_SWAP_MS, Math.max(MIN_SWAP_MS, value));
     }
   );
+  // Hover audio is the safe default; this explicit toggle lets the user make
+  // only the active foreground clip in each visible cell audible.
+  const [allAudio, setAllAudio] = useState(false);
 
   // a random slice of the library per visit; reshuffling reorders that slice
   const [seed] = useState(newSeed);
@@ -739,6 +744,8 @@ export const ClipWall: React.FC = () => {
             onSetAdvance={setAdvance}
             swapMs={swapMs}
             onSetSwapMs={setSwapMs}
+            allAudio={allAudio}
+            onSetAllAudio={setAllAudio}
             onReshuffle={reshuffle}
           />
         </div>
@@ -767,6 +774,7 @@ export const ClipWall: React.FC = () => {
                 blur={mode === "blur"}
                 loop={advance === "timer"}
                 suspended={!visible}
+                allAudio={allAudio}
                 onDone={advance === "end" ? () => advanceCell(i) : undefined}
                 onMetadata={onMetadata}
               />
