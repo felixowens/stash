@@ -299,20 +299,41 @@ const WallVideo: React.FC<IWallVideoProps> = ({
     if (!video) return;
     if (suspended) {
       video.pause();
+      video.muted = true;
       return;
     }
-    video.muted = !audible;
+
+    // Always start a newly mounted layer muted. If the pointer is already
+    // over the cell during a swap, mounting it unmuted makes Chrome reject
+    // autoplay; the fallback below then leaves the clip silent until the next
+    // swap. Unmute only after muted playback has been accepted.
+    video.muted = true;
     // a clip that has already played out is the outgoing half of a swap: it is
     // holding its last frame, and restarting it on resume would be a glitch
     if (video.ended) return;
+
+    let cancelled = false;
     const attempt = video.play();
     if (attempt) {
-      attempt.catch(() => {
-        // unmuted autoplay refused — a muted cell beats a dead cell
-        video.muted = true;
-        video.play().catch(() => {});
-      });
+      attempt
+        .then(() => {
+          if (!cancelled && audible && videoRef.current === video) {
+            video.muted = false;
+          }
+        })
+        .catch(() => {
+          // A muted retry is the safe fallback if loading or playback still
+          // fails for a browser-specific reason.
+          video.muted = true;
+          video.play().catch(() => {});
+        });
+    } else if (audible) {
+      video.muted = false;
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [audible, suspended]);
 
   // Chrome hangs on to the decoder for a detached, un-paused media element
@@ -338,6 +359,9 @@ const WallVideo: React.FC<IWallVideoProps> = ({
   }
 
   function handlePlaying() {
+    if (audible && videoRef.current) {
+      videoRef.current.muted = false;
+    }
     if (playedRef.current) return;
     playedRef.current = true;
     onPlaying?.();
@@ -367,7 +391,7 @@ const WallVideo: React.FC<IWallVideoProps> = ({
         className={layerClass}
         src={src}
         poster={cell.clip.paths.screenshot ?? undefined}
-        muted={!audible}
+        muted
         autoPlay
         loop={loop}
         playsInline
@@ -396,7 +420,7 @@ const WallVideo: React.FC<IWallVideoProps> = ({
         className="clip-wall__media clip-wall__media--foreground"
         src={src}
         poster={cell.clip.paths.screenshot ?? undefined}
-        muted={!audible}
+        muted
         autoPlay
         loop={loop}
         playsInline
