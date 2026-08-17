@@ -3179,6 +3179,38 @@ func TestSceneQueryHasMarkers(t *testing.T) {
 	})
 }
 
+func TestSceneQueryHasClips(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		sceneID := sceneIDs[sceneIdxWithMarkers]
+		clip := models.NewClip()
+		clip.SceneID = sceneID
+		clip.StartSeconds = 0
+		clip.EndSeconds = 10
+		assert.NoError(t, db.Clip.Create(ctx, &clip))
+
+		hasClips := "true"
+		sceneFilter := models.SceneFilterType{HasClips: &hasClips}
+		scenes := queryScene(ctx, t, db.Scene, &sceneFilter, &models.FindFilterType{})
+
+		var foundClipScene bool
+		for _, scene := range scenes {
+			if scene.ID == sceneID {
+				foundClipScene = true
+				break
+			}
+		}
+		assert.True(t, foundClipScene)
+
+		hasClips = "false"
+		scenes = queryScene(ctx, t, db.Scene, &sceneFilter, &models.FindFilterType{})
+		for _, scene := range scenes {
+			assert.NotEqual(t, sceneID, scene.ID)
+		}
+
+		return nil
+	})
+}
+
 func TestSceneQueryIsMissingGallery(t *testing.T) {
 	withTxn(func(ctx context.Context) error {
 		sqb := db.Scene

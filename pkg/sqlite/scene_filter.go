@@ -117,6 +117,7 @@ func (qb *sceneFilterHandler) criterionHandler() criterionHandler {
 		qb.codecCriterionHandler(sceneFilter.AudioCodec, "video_files.audio_codec", qb.addVideoFilesTable),
 
 		qb.hasMarkersCriterionHandler(sceneFilter.HasMarkers),
+		qb.hasClipsCriterionHandler(sceneFilter.HasClips),
 		qb.isMissingCriterionHandler(sceneFilter.IsMissing),
 		qb.urlsCriterionHandler(sceneFilter.URL),
 
@@ -389,6 +390,20 @@ func (qb *sceneFilterHandler) hasMarkersCriterionHandler(hasMarkers *string) cri
 			} else {
 				f.addWhere("scene_markers.id IS NULL")
 			}
+		}
+	}
+}
+
+func (qb *sceneFilterHandler) hasClipsCriterionHandler(hasClips *string) criterionHandlerFunc {
+	return func(ctx context.Context, f *filterBuilder) {
+		if hasClips == nil {
+			return
+		}
+
+		if *hasClips == "true" {
+			f.addWhere("EXISTS (SELECT 1 FROM clips WHERE clips.scene_id = scenes.id)")
+		} else if *hasClips == "false" {
+			f.addWhere("NOT EXISTS (SELECT 1 FROM clips WHERE clips.scene_id = scenes.id)")
 		}
 	}
 }

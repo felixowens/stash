@@ -7,6 +7,7 @@ import {
   createDurationCriterionOption,
 } from "./criteria/criterion";
 import { HasMarkersCriterionOption } from "./criteria/has-markers";
+import { HasClipsCriterionOption } from "./criteria/has-clips";
 import { SceneIsMissingCriterionOption } from "./criteria/is-missing";
 import {
   GroupsCriterionOption,
@@ -121,6 +122,7 @@ const criterionOptions = [
   createMandatoryNumberCriterionOption("play_count"),
   createMandatoryTimestampCriterionOption("last_played_at"),
   HasMarkersCriterionOption,
+  HasClipsCriterionOption,
   SceneIsMissingCriterionOption,
   TagsCriterionOption,
   createMandatoryNumberCriterionOption("tag_count"),
