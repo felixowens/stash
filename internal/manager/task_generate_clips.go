@@ -15,10 +15,11 @@ import (
 // file is already loaded) or over one specific Clip (whose source scene it
 // loads itself).
 type GenerateClipsTask struct {
-	repository models.Repository
-	Scene      *models.Scene
-	Clip       *models.Clip
-	Overwrite  bool
+	repository     models.Repository
+	Scene          *models.Scene
+	Clip           *models.Clip
+	Overwrite      bool
+	GenerateStream bool
 
 	generator *generate.Generator
 }
@@ -106,11 +107,15 @@ func (t *GenerateClipsTask) generateClip(videoFile *models.VideoFile, clip *mode
 
 	g := t.generator
 
-	// the pre-rendered full-range stream is the heavy step; do it first so the
-	// clip becomes fast to play as soon as possible
-	if err := g.ClipStreamVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds); err != nil {
-		logger.Errorf("[generator] failed to generate clip stream video: %v", err)
-		logErrorOutput(err)
+	// Full-stream encoding is intentionally opt-in for automatic clip creation:
+	// a high-resolution x264 render can take minutes on a long source. Until an
+	// explicit Generate job prepares it, /clip/.../stream.mp4 falls back to the
+	// existing live transcode path.
+	if t.GenerateStream {
+		if err := g.ClipStreamVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds); err != nil {
+			logger.Errorf("[generator] failed to generate clip stream video: %v", err)
+			logErrorOutput(err)
+		}
 	}
 
 	if err := g.ClipPreviewVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, instance.Config.GetPreviewAudio()); err != nil {
@@ -146,9 +151,15 @@ func (t *GenerateClipsTask) clipsNeeded(ctx context.Context) int {
 }
 
 func (t *GenerateClipsTask) clipExists(clipID int) bool {
-	streamExists, _ := fsutil.FileExists(instance.Paths.Clips.GetStreamPath(clipID))
 	videoExists, _ := fsutil.FileExists(instance.Paths.Clips.GetVideoPreviewPath(clipID))
 	screenshotExists, _ := fsutil.FileExists(instance.Paths.Clips.GetScreenshotPath(clipID))
+	if !videoExists || !screenshotExists {
+		return false
+	}
+	if !t.GenerateStream {
+		return true
+	}
 
-	return streamExists && videoExists && screenshotExists
+	streamExists, _ := fsutil.FileExists(instance.Paths.Clips.GetStreamPath(clipID))
+	return streamExists
 }

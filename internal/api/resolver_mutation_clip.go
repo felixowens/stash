@@ -95,8 +95,9 @@ func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput
 // disabled generation must not fail the originating mutation.
 func enqueueClipGeneration(ctx context.Context, clipID int) {
 	if _, err := manager.GetInstance().Generate(ctx, manager.GenerateMetadataInput{
-		ClipIDs:    []string{strconv.Itoa(clipID)},
-		SceneClips: true,
+		ClipIDs:         []string{strconv.Itoa(clipID)},
+		SceneClips:      true,
+		SkipClipStreams: true,
 	}); err != nil {
 		logger.Warnf("error enqueuing clip generation for clip %d: %v", clipID, err)
 	}

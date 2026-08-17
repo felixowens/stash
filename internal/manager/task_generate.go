@@ -35,6 +35,9 @@ type GenerateMetadataInput struct {
 	// Generate preview + screenshot files for virtual scene clips
 	SceneClips      bool `json:"sceneClips"`
 	ImageThumbnails bool `json:"imageThumbnails"`
+	// Skip the expensive full-stream render for automatic clip creation. This
+	// is internal; explicit Generate jobs still render the static stream.
+	SkipClipStreams bool `json:"-"`
 	// scene ids to generate for
 	SceneIDs []string `json:"sceneIDs"`
 	// marker ids to generate for
@@ -518,10 +521,11 @@ func (j *GenerateJob) queueSceneJobs(ctx context.Context, g *generate.Generator,
 
 	if j.input.SceneClips {
 		task := &GenerateClipsTask{
-			repository: r,
-			Scene:      scene,
-			Overwrite:  j.overwrite,
-			generator:  g,
+			repository:     r,
+			Scene:          scene,
+			Overwrite:      j.overwrite,
+			GenerateStream: !j.input.SkipClipStreams,
+			generator:      g,
 		}
 
 		clips := task.clipsNeeded(ctx)
@@ -601,10 +605,11 @@ func (j *GenerateJob) queueMarkerJob(g *generate.Generator, marker *models.Scene
 
 func (j *GenerateJob) queueClipJob(g *generate.Generator, clip *models.Clip, queue chan<- Task) {
 	task := &GenerateClipsTask{
-		repository: j.repository,
-		Clip:       clip,
-		Overwrite:  j.overwrite,
-		generator:  g,
+		repository:     j.repository,
+		Clip:           clip,
+		Overwrite:      j.overwrite,
+		GenerateStream: !j.input.SkipClipStreams,
+		generator:      g,
 	}
 	j.totals.sceneClips++
 	j.totals.tasks++
