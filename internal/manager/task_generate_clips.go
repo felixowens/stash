@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/logger"
@@ -10,16 +11,15 @@ import (
 	"github.com/stashapp/stash/pkg/scene/generate"
 )
 
-// GenerateClipsTask generates the preview video + poster screenshot for virtual
+// GenerateClipsTask generates playback, preview, and poster files for virtual
 // clips. It operates either over every clip of a single Scene (whose primary
 // file is already loaded) or over one specific Clip (whose source scene it
 // loads itself).
 type GenerateClipsTask struct {
-	repository     models.Repository
-	Scene          *models.Scene
-	Clip           *models.Clip
-	Overwrite      bool
-	GenerateStream bool
+	repository models.Repository
+	Scene      *models.Scene
+	Clip       *models.Clip
+	Overwrite  bool
 
 	generator *generate.Generator
 }
@@ -64,7 +64,7 @@ func (t *GenerateClipsTask) Start(ctx context.Context) {
 			return
 		}
 
-		t.generateClip(videoFile, t.Clip)
+		t.generateClip(ctx, videoFile, t.Clip)
 	}
 }
 
@@ -90,11 +90,11 @@ func (t *GenerateClipsTask) generateSceneClips(ctx context.Context) {
 		index := i + 1
 		logger.Progressf("[generator] <scene %d> clip %d of %d", t.Scene.ID, index, len(clips))
 
-		t.generateClip(videoFile, clip)
+		t.generateClip(ctx, videoFile, clip)
 	}
 }
 
-func (t *GenerateClipsTask) generateClip(videoFile *models.VideoFile, clip *models.Clip) {
+func (t *GenerateClipsTask) generateClip(ctx context.Context, videoFile *models.VideoFile, clip *models.Clip) {
 	// check if clip range is past the video duration
 	if clip.StartSeconds > float64(videoFile.Duration) {
 		logger.Warnf("[generator] clip %d starts at %.2fs which exceeds video duration of %.2fs, skipping", clip.ID, clip.StartSeconds, float64(videoFile.Duration))
@@ -107,23 +107,19 @@ func (t *GenerateClipsTask) generateClip(videoFile *models.VideoFile, clip *mode
 
 	g := t.generator
 
-	// Full-stream encoding is intentionally opt-in for automatic clip creation:
-	// a high-resolution x264 render can take minutes on a long source. Until an
-	// explicit Generate job prepares it, /clip/.../stream.mp4 falls back to the
-	// existing live transcode path.
-	if t.GenerateStream {
-		if err := g.ClipStreamVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds); err != nil {
-			logger.Errorf("[generator] failed to generate clip stream video: %v", err)
-			logErrorOutput(err)
-		}
+	// Render playback first: until this file lands every play consumes a live
+	// ffmpeg transcode, and concurrent clip surfaces can starve one another.
+	if err := g.ClipStreamVideo(ctx, videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds); err != nil {
+		logger.Errorf("[generator] failed to generate clip stream video: %v", err)
+		logErrorOutput(err)
 	}
 
-	if err := g.ClipPreviewVideo(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, instance.Config.GetPreviewAudio()); err != nil {
+	if err := g.ClipPreviewVideo(ctx, videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, instance.Config.GetPreviewAudio()); err != nil {
 		logger.Errorf("[generator] failed to generate clip video preview: %v", err)
 		logErrorOutput(err)
 	}
 
-	if err := g.ClipScreenshot(context.TODO(), videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, videoFile.Width); err != nil {
+	if err := g.ClipScreenshot(ctx, videoFile.Path, clip.ID, clip.StartSeconds, clip.EndSeconds, videoFile.Width); err != nil {
 		logger.Errorf("[generator] failed to generate clip screenshot: %v", err)
 		logErrorOutput(err)
 	}
@@ -151,15 +147,44 @@ func (t *GenerateClipsTask) clipsNeeded(ctx context.Context) int {
 }
 
 func (t *GenerateClipsTask) clipExists(clipID int) bool {
+	streamExists, _ := fsutil.FileExists(instance.Paths.Clips.GetStreamPath(clipID))
 	videoExists, _ := fsutil.FileExists(instance.Paths.Clips.GetVideoPreviewPath(clipID))
 	screenshotExists, _ := fsutil.FileExists(instance.Paths.Clips.GetScreenshotPath(clipID))
-	if !videoExists || !screenshotExists {
-		return false
-	}
-	if !t.GenerateStream {
-		return true
+
+	return streamExists && videoExists && screenshotExists
+}
+
+// enqueueMissingClipStreams upgrades clips created before static playback was
+// automatic. It queues one resumable background job after startup; completed
+// assets are skipped, so subsequent starts only pick up interrupted work.
+func (s *Manager) enqueueMissingClipStreams(ctx context.Context) {
+	var clips []*models.Clip
+	if err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		var err error
+		clips, err = s.Repository.Clip.All(ctx)
+		return err
+	}); err != nil {
+		logger.Warnf("error finding clips missing playback streams: %v", err)
+		return
 	}
 
-	streamExists, _ := fsutil.FileExists(instance.Paths.Clips.GetStreamPath(clipID))
-	return streamExists
+	clipIDs := make([]string, 0, len(clips))
+	for _, clip := range clips {
+		streamPath := s.Paths.Clips.GetStreamPath(clip.ID)
+		if exists, _ := fsutil.FileExists(streamPath); !exists {
+			clipIDs = append(clipIDs, strconv.Itoa(clip.ID))
+		}
+	}
+	if len(clipIDs) == 0 {
+		return
+	}
+
+	if _, err := s.Generate(ctx, GenerateMetadataInput{
+		ClipIDs:    clipIDs,
+		SceneClips: true,
+	}); err != nil {
+		logger.Warnf("error enqueuing playback generation for %d clips: %v", len(clipIDs), err)
+		return
+	}
+	logger.Infof("queued playback generation for %d clips missing static streams", len(clipIDs))
 }

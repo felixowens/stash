@@ -2276,18 +2276,6 @@ input[type="range"].clip-wall__interval-range {
   z-index: 1;
 }
 
-// upcoming clips buffer here: present enough to load, too small to see
-.clip-wall__warmers {
-  height: 1px;
-  left: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  position: absolute;
-  top: 0;
-  width: 1px;
-}
-
 // blur framing: two stacked copies of the same clip inside one crossfade
 // layer. The foreground is contained (nothing cropped) and the backdrop covers
 // and blurs, so the gap reads as an extension of the shot instead of dead

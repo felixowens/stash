@@ -85,7 +85,7 @@ func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput
 	// render the clip's stream + preview + screenshot in the background
 	// (best-effort — a missing ffmpeg or disabled generation must not fail
 	// clip creation)
-	enqueueClipGeneration(ctx, newClip.ID)
+	enqueueClipGeneration(ctx, newClip.ID, false)
 
 	return r.getClip(ctx, newClip.ID)
 }
@@ -93,11 +93,11 @@ func (r *mutationResolver) ClipCreate(ctx context.Context, input ClipCreateInput
 // enqueueClipGeneration kicks off background generation of a clip's pre-rendered
 // stream, hover preview and poster screenshot. Best-effort: a missing ffmpeg or
 // disabled generation must not fail the originating mutation.
-func enqueueClipGeneration(ctx context.Context, clipID int) {
+func enqueueClipGeneration(ctx context.Context, clipID int, overwrite bool) {
 	if _, err := manager.GetInstance().Generate(ctx, manager.GenerateMetadataInput{
-		ClipIDs:         []string{strconv.Itoa(clipID)},
-		SceneClips:      true,
-		SkipClipStreams: true,
+		ClipIDs:    []string{strconv.Itoa(clipID)},
+		SceneClips: true,
+		Overwrite:  overwrite,
 	}); err != nil {
 		logger.Warnf("error enqueuing clip generation for clip %d: %v", clipID, err)
 	}
@@ -172,7 +172,7 @@ func (r *mutationResolver) ClipUpdate(ctx context.Context, input ClipUpdateInput
 	// background.
 	if partial.StartSeconds.Set || partial.EndSeconds.Set || partial.SceneID.Set {
 		deleteGeneratedClipFiles(clipID)
-		enqueueClipGeneration(ctx, clipID)
+		enqueueClipGeneration(ctx, clipID, true)
 	}
 
 	return ret, nil

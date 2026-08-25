@@ -17,7 +17,7 @@ input GenerateMetadataInput {
   imagePhashes: Boolean
   imageThumbnails: Boolean
   clipPreviews: Boolean
-  "Generate preview + screenshot files for virtual scene clips"
+  "Generate playback, preview, and screenshot files for virtual scene clips"
   sceneClips: Boolean
 
   "scene ids to generate for"

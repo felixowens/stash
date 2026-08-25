@@ -1,8 +1,9 @@
 """
 A Clip is a virtual, non-destructive viewable asset: a [start_seconds,
 end_seconds] range of a source scene with its own rating, tags, performers,
-studio, date and engagement. Playback streams the source scene on the fly, so a
-clip is removed when its source scene is deleted.
+studio, date and engagement. Playback uses a generated, range-capable MP4 when available and falls back to
+a bounded live transcode while generation finishes. A clip is removed when its
+source scene is deleted.
 """
 type Clip {
   id: ID!
@@ -103,7 +104,7 @@ type FindClipsResultType {
 }
 
 type ClipPathsType {
-  "Live, frame-accurate transcode of the bounded range of the source scene"
+  "Frame-accurate playback URL for the bounded range of the source scene"
   stream: String
   "Generated short preview video (mp4) for card hover"
   preview: String

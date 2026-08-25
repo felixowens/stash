@@ -43,8 +43,6 @@ const DEFAULT_SWAP_MS = 8000;
 const CROSSFADE_MS = 450;
 /** a clip that hasn't reported playing by now is shown regardless */
 const REVEAL_FALLBACK_MS = 5000;
-/** how many clips ahead of the queue to buffer */
-const WARM_AHEAD = 2;
 /** a foreground clip that neither ends nor makes progress for this long is stuck */
 const STALL_MS = 10000;
 /** how close to the top edge the cursor (or a tap) has to get to summon the bar */
@@ -118,18 +116,14 @@ function useClipQueue(pool: readonly WallClip[]) {
   const queue = useRef({ order: [] as WallClip[], cursor: 0 });
   // bumped whenever the order is re-seeded, so the wall knows to refill
   const [generation, setGeneration] = useState(0);
-  // mirrors queue.cursor into render, so what's coming up can be warmed
-  const [cursor, setCursor] = useState(0);
 
   useEffect(() => {
     queue.current = { order: shuffle(pool), cursor: 0 };
-    setCursor(0);
     setGeneration((g) => g + 1);
   }, [pool]);
 
   const reshuffle = useCallback(() => {
     queue.current = { order: shuffle(queue.current.order), cursor: 0 };
-    setCursor(0);
     setGeneration((g) => g + 1);
   }, []);
 
@@ -141,18 +135,10 @@ function useClipQueue(pool: readonly WallClip[]) {
       q.order = shuffle(q.order);
       q.cursor = 0;
     }
-    const clip = q.order[q.cursor++];
-    setCursor(q.cursor);
-    return clip;
+    return q.order[q.cursor++];
   }, []);
 
-  /** the next n clips, without consuming them; short near the end of a lap */
-  const peek = useCallback((n: number) => {
-    const q = queue.current;
-    return q.order.slice(q.cursor, q.cursor + n);
-  }, []);
-
-  return { take, peek, reshuffle, cursor, generation, size: pool.length };
+  return { take, reshuffle, generation, size: pool.length };
 }
 
 // ------------------------------------------------------------
@@ -433,38 +419,6 @@ const WallVideo: React.FC<IWallVideoProps> = ({
   );
 };
 
-/**
- * An upcoming clip, loading quietly off-screen. It is never played — it exists
- * so Chrome's media cache already holds the first chunk when the clip is
- * promoted into a cell, which is what makes the swap look instant.
- */
-const WarmVideo: React.FC<{ src?: string }> = ({ src }) => {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    return () => {
-      if (!video) return;
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-    };
-  }, []);
-
-  return (
-    <video
-      ref={videoRef}
-      className="clip-wall__warmer"
-      src={src}
-      muted
-      playsInline
-      preload="auto"
-      aria-hidden="true"
-      tabIndex={-1}
-    />
-  );
-};
-
 interface IWallCellProps {
   cell: IWallCell;
   blur: boolean;
@@ -605,8 +559,7 @@ export const ClipWall: React.FC = () => {
   const { data, loading } = useFindClipsForWall(filter);
   const pool = useMemo(() => data?.findClips.clips ?? [], [data]);
 
-  const { take, peek, reshuffle, cursor, generation, size } =
-    useClipQueue(pool);
+  const { take, reshuffle, generation, size } = useClipQueue(pool);
   // a pool smaller than the chosen count shows what exists rather than clones
   const cellCount = Math.min(count, size);
 
@@ -706,13 +659,6 @@ export const ClipWall: React.FC = () => {
   const layout = solveWallLayout(aspects, containerAspect, mode);
 
   const empty = !loading && pool.length === 0;
-  // recomputed every time the queue moves; keyed by clip id below, so a clip
-  // still coming up keeps the element it has already been buffering into
-  const upcoming = useMemo(
-    () => peek(WARM_AHEAD),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [peek, cursor, generation]
-  );
 
   return (
     <div className={cx("clip-wall", { "is-chrome-hidden": !chromeRevealed })}>
@@ -787,12 +733,6 @@ export const ClipWall: React.FC = () => {
             <LoadingIndicator />
           </div>
         )}
-
-        <div className="clip-wall__warmers" aria-hidden="true">
-          {upcoming.map((clip) => (
-            <WarmVideo key={clip.id} src={clip.paths.stream ?? undefined} />
-          ))}
-        </div>
 
         {empty && (
           <div className="clip-wall__message">

@@ -136,6 +136,9 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 	}
 
 	instance = mgr
+	if !cfg.IsNewSystem() && mgr.Database.Ready() == nil {
+		mgr.enqueueMissingClipStreams(context.Background())
+	}
 	return mgr, nil
 }
 
