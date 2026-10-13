@@ -1440,7 +1440,7 @@ $clip-glass: rgba(10, 14, 18, 0.62);
 }
 
 // ============================================================
-// Vertical shuffle/autoplay feed (TikTok-style full-screen pager)
+// Vertical feed: one persistent player over a scroll-snap pager
 // ============================================================
 .clip-feed {
   background: #05080c;
@@ -1458,7 +1458,9 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   display: flex;
   justify-content: space-between;
   left: 0;
-  padding: 12px 18px 26px;
+  padding: calc(12px + env(safe-area-inset-top))
+    calc(18px + env(safe-area-inset-right)) 26px
+    calc(18px + env(safe-area-inset-left));
   pointer-events: none;
   position: absolute;
   right: 0;
@@ -1549,6 +1551,34 @@ $clip-glass: rgba(10, 14, 18, 0.62);
   position: relative;
   scroll-snap-align: start;
   scroll-snap-stop: always;
+}
+
+.clip-feed__player {
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 1;
+}
+
+.clip-feed__recovery {
+  align-items: center;
+  background: rgba(8, 12, 16, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: #f5f8fa;
+  display: flex;
+  gap: 10px;
+  left: 50%;
+  max-width: calc(100% - 40px);
+  min-height: 48px;
+  padding: 12px 18px;
+  pointer-events: auto;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .clip-feed__backdrop {
@@ -2370,6 +2400,12 @@ input[type="range"].clip-wall__interval-range {
     padding: 10px 12px 22px;
   }
 
+  .clip-feed__topbar {
+    padding: calc(10px + env(safe-area-inset-top))
+      calc(12px + env(safe-area-inset-right)) 22px
+      calc(12px + env(safe-area-inset-left));
+  }
+
   .clip-feed__brand span,
   .clip-wall__brand span {
     display: none;
@@ -2381,7 +2417,7 @@ input[type="range"].clip-wall__interval-range {
   }
 
   .clip-feed__info {
-    bottom: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
     left: 14px;
     max-width: calc(100% - 88px);
   }
@@ -2391,7 +2427,7 @@ input[type="range"].clip-wall__interval-range {
   }
 
   .clip-feed__rail {
-    bottom: 26px;
+    bottom: calc(26px + env(safe-area-inset-bottom));
     right: 10px;
   }
 

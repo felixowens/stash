@@ -10,6 +10,7 @@ src/locales/**/*.json
 
 # testing
 /coverage
+/test-results
 
 # production
 /build

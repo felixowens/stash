@@ -15,9 +15,7 @@ import {
   faEye,
   faEyeSlash,
   faFilm,
-  faForwardStep,
   faPlay,
-  faRepeat,
   faShuffle,
   faUpRightFromSquare,
   faVolumeHigh,
@@ -28,8 +26,6 @@ import * as GQL from "src/core/generated-graphql";
 import {
   queryFindClips,
   useClipIncrementO,
-  useClipIncrementPlayCount,
-  useClipSaveActivity,
   useClipUpdate,
 } from "src/core/StashService";
 import { ListFilterModel } from "src/models/list-filter/filter";
@@ -39,20 +35,16 @@ import { Icon } from "../Shared/Icon";
 import { SweatDrops } from "../Shared/SweatDrops";
 import { RatingSystem } from "../Shared/Rating/RatingSystem";
 import { LoadingIndicator } from "../Shared/LoadingIndicator";
+import { useClipFeedPlayer } from "./useClipFeedPlayer";
 
 const PER_PAGE = 40;
 // fetch the next page when the user is this many clips from the end
 const PREFETCH_AHEAD = 5;
 // items within this distance of the active one render their full content
 const MOUNT_RADIUS = 3;
-// items within this distance mount a real <video> (preloaded, gapless swipes)
-const VIDEO_RADIUS = 1;
-const DOUBLE_TAP_MS = 280;
 /** how long "press h or tap the eye" lingers after entering clean mode */
 const CLEAN_HINT_MS = 2000;
 
-const MUTED_KEY = "clip-feed-muted";
-const AUTO_ADVANCE_KEY = "clip-feed-auto-advance";
 const CLEAN_KEY = "clip-feed-clean";
 
 type FeedOrder = "shuffle" | "newest";
@@ -66,14 +58,11 @@ interface IFeedItemProps {
   index: number;
   active: boolean;
   mounted: boolean;
-  withVideo: boolean;
   muted: boolean;
-  autoAdvance: boolean;
+  progress: number;
   onUnmute: () => void;
-  // called when this clip finishes and autoplay-next is on; the parent
-  // ignores calls from items that are no longer active
-  onEnded: (index: number) => void;
-  registerVideo: (index: number, el: HTMLVideoElement | null) => void;
+  onTogglePlay: () => void;
+  onSeek: (fraction: number) => void;
 }
 
 const FeedItem: React.FC<IFeedItemProps> = ({
@@ -81,29 +70,16 @@ const FeedItem: React.FC<IFeedItemProps> = ({
   index,
   active,
   mounted,
-  withVideo,
   muted,
-  autoAdvance,
+  progress,
   onUnmute,
-  onEnded,
-  registerVideo,
+  onTogglePlay,
+  onSeek,
 }) => {
   const intl = useIntl();
 
   const [updateClip] = useClipUpdate();
   const [incrementO] = useClipIncrementO(clip.id);
-  const [incrementPlayCount] = useClipIncrementPlayCount();
-  const [saveActivity] = useClipSaveActivity();
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hasIncrementedPlay = useRef(false);
-  const watched = useRef(0);
-  const lastTime = useRef(0);
-  const tapTimer = useRef<number>();
-
-  const [paused, setPaused] = useState(false);
-  const [buffering, setBuffering] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [oBurst, setOBurst] = useState(0);
 
   // the queue is a detached snapshot (client.query into state), so Apollo
@@ -111,97 +87,6 @@ const FeedItem: React.FC<IFeedItemProps> = ({
   const [oCount, setOCount] = useState(clip.o_counter ?? 0);
   const [organized, setOrganized] = useState(clip.organized);
   const [rating, setRating] = useState<number | null>(clip.rating100 ?? null);
-
-  const setVideoRef = useCallback(
-    (el: HTMLVideoElement | null) => {
-      videoRef.current = el;
-      registerVideo(index, el);
-    },
-    [index, registerVideo]
-  );
-
-  const flushActivity = useCallback(() => {
-    if (watched.current <= 0.5) return;
-    saveActivity({
-      variables: {
-        id: clip.id,
-        resume_time: videoRef.current?.currentTime ?? 0,
-        playDuration: watched.current,
-      },
-    });
-    watched.current = 0;
-  }, [saveActivity, clip.id]);
-
-  // play/pause with the active state; flush watch time when scrolled away
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (active) {
-      const attempt = video.play();
-      if (attempt) {
-        attempt.catch(() => {
-          // autoplay with sound blocked — retry muted
-          video.muted = true;
-          video.play().catch(() => setPaused(true));
-        });
-      }
-    } else {
-      video.pause();
-      flushActivity();
-      setPaused(false);
-    }
-  }, [active, withVideo, flushActivity]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = muted;
-    }
-  }, [muted, withVideo]);
-
-  // flush any remaining watch time on unmount
-  useEffect(() => {
-    return () => flushActivity();
-  }, [flushActivity]);
-
-  useEffect(() => {
-    return () => window.clearTimeout(tapTimer.current);
-  }, []);
-
-  function onPlay() {
-    setPaused(false);
-    if (!hasIncrementedPlay.current) {
-      hasIncrementedPlay.current = true;
-      incrementPlayCount({ variables: { id: clip.id } });
-    }
-    lastTime.current = videoRef.current?.currentTime ?? 0;
-  }
-
-  function onTimeUpdate() {
-    const video = videoRef.current;
-    if (!video) return;
-    const t = video.currentTime;
-    const delta = t - lastTime.current;
-    if (delta > 0 && delta < 2) {
-      // accumulate forward playback only (ignore seeks)
-      watched.current += delta;
-    }
-    lastTime.current = t;
-    if (video.duration > 0) {
-      setProgress(t / video.duration);
-    }
-  }
-
-  function togglePlay() {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) {
-      video.play().catch(() => {});
-    } else {
-      video.pause();
-      setPaused(true);
-    }
-  }
 
   function doIncrementO() {
     setOBurst(Date.now());
@@ -212,30 +97,14 @@ const FeedItem: React.FC<IFeedItemProps> = ({
     });
   }
 
-  // single tap toggles play; double tap increments the O counter
-  function onSurfaceClick() {
-    if (tapTimer.current) {
-      window.clearTimeout(tapTimer.current);
-      tapTimer.current = undefined;
-      doIncrementO();
-      return;
-    }
-    tapTimer.current = window.setTimeout(() => {
-      tapTimer.current = undefined;
-      togglePlay();
-    }, DOUBLE_TAP_MS);
-  }
-
   function seekToFraction(e: React.PointerEvent<HTMLDivElement>) {
-    const video = videoRef.current;
-    if (!video || !video.duration) return;
+    if (!active) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const fraction = Math.min(
       1,
       Math.max(0, (e.clientX - rect.left) / rect.width)
     );
-    video.currentTime = fraction * video.duration;
-    setProgress(fraction);
+    onSeek(fraction);
   }
 
   function onSeekPointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -267,7 +136,10 @@ const FeedItem: React.FC<IFeedItemProps> = ({
   const sceneTitle = clip.scene?.title || `Scene ${clip.scene?.id}`;
 
   return (
-    <section className="clip-feed__item" data-index={index}>
+    <section
+      className={cx("clip-feed__item", { "is-active": active })}
+      data-index={index}
+    >
       {mounted && (
         <>
           {clip.paths.screenshot && (
@@ -277,47 +149,18 @@ const FeedItem: React.FC<IFeedItemProps> = ({
             />
           )}
 
-          <div className="clip-feed__stage" onClick={onSurfaceClick}>
-            {withVideo ? (
-              <video
-                ref={setVideoRef}
-                className="clip-feed__video"
-                src={clip.paths.stream ?? undefined}
-                poster={clip.paths.screenshot ?? undefined}
-                preload="auto"
-                playsInline
-                loop={!autoAdvance}
-                muted={muted}
-                onPlay={onPlay}
-                onPause={() => setPaused(true)}
-                onTimeUpdate={onTimeUpdate}
-                onWaiting={() => setBuffering(true)}
-                onPlaying={() => setBuffering(false)}
-                onCanPlay={() => setBuffering(false)}
-                onEnded={() => {
-                  flushActivity();
-                  onEnded(index);
-                }}
+          <div
+            className="clip-feed__stage"
+            onClick={() => {
+              if (active) onTogglePlay();
+            }}
+          >
+            {clip.paths.screenshot && (
+              <img
+                className="clip-feed__poster"
+                src={clip.paths.screenshot}
+                alt=""
               />
-            ) : (
-              clip.paths.screenshot && (
-                <img
-                  className="clip-feed__poster"
-                  src={clip.paths.screenshot}
-                  alt=""
-                />
-              )
-            )}
-
-            {active && paused && (
-              <div className="clip-feed__state-badge">
-                <Icon icon={faPlay} />
-              </div>
-            )}
-            {active && buffering && !paused && (
-              <div className="clip-feed__buffering">
-                <LoadingIndicator inline small message="" />
-              </div>
             )}
             {oBurst > 0 && (
               <div key={oBurst} className="clip-feed__o-burst">
@@ -466,19 +309,29 @@ export const ClipFeed: React.FC = () => {
   const [seed, setSeed] = useState(newSeed);
   const [clips, setClips] = useState<GQL.SlimClipDataFragment[]>([]);
   const [total, setTotal] = useState<number>();
+  const [queueGeneration, setQueueGeneration] = useState(0);
   const [activeIndex, setActiveIndexState] = useState(0);
-  // mirror of activeIndex for event handlers that must not act on a stale
-  // value (e.g. an ended event from a clip the user just scrolled away from)
+  // Resize callbacks need the latest index without recreating their observer.
   const activeIndexRef = useRef(0);
   const setActiveIndex = useCallback((index: number) => {
     activeIndexRef.current = index;
     setActiveIndexState(index);
   }, []);
-  const [muted, setMuted] = useState(
-    () => localStorage.getItem(MUTED_KEY) !== "0"
-  );
-  const [autoAdvance, setAutoAdvance] = useState(
-    () => localStorage.getItem(AUTO_ADVANCE_KEY) !== "0"
+  const activeClip = clips[activeIndex];
+  const {
+    videoRef,
+    muted,
+    status,
+    progress,
+    togglePlay,
+    retry,
+    setMutedPersistent,
+    seek,
+    events,
+  } = useClipFeedPlayer(
+    activeClip?.id,
+    activeClip?.paths.stream,
+    queueGeneration
   );
 
   // clean mode is only ever asked for — nothing times out into it, and nothing
@@ -500,22 +353,11 @@ export const ClipFeed: React.FC = () => {
   }, [clean]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRegistry = useRef(new Map<number, HTMLVideoElement>());
   const pageRef = useRef(0);
   const loadingRef = useRef(false);
   const exhaustedRef = useRef(false);
   // bumped on every queue reset so stale in-flight fetches are dropped
   const generationRef = useRef(0);
-
-  const setMutedPersistent = useCallback((value: boolean) => {
-    setMuted(value);
-    localStorage.setItem(MUTED_KEY, value ? "1" : "0");
-  }, []);
-
-  const setAutoAdvancePersistent = useCallback((value: boolean) => {
-    setAutoAdvance(value);
-    localStorage.setItem(AUTO_ADVANCE_KEY, value ? "1" : "0");
-  }, []);
 
   const setCleanPersistent = useCallback((value: boolean) => {
     setClean(value);
@@ -569,6 +411,7 @@ export const ClipFeed: React.FC = () => {
   // reset the queue whenever the ordering or underlying filter changes
   useEffect(() => {
     generationRef.current++;
+    setQueueGeneration(generationRef.current);
     pageRef.current = 0;
     loadingRef.current = false;
     exhaustedRef.current = false;
@@ -593,7 +436,7 @@ export const ClipFeed: React.FC = () => {
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
             setActiveIndex(Number((entry.target as HTMLElement).dataset.index));
           }
         }
@@ -606,49 +449,29 @@ export const ClipFeed: React.FC = () => {
     return () => observer.disconnect();
   }, [clips.length, setActiveIndex]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      container.scrollTo({
+        top: activeIndexRef.current * container.clientHeight,
+      });
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   const scrollToIndex = useCallback(
     (index: number) => {
       const container = containerRef.current;
       if (!container || clips.length === 0) return;
       const clamped = Math.max(0, Math.min(index, clips.length - 1));
-      // switch the active item immediately so the outgoing clip can't fire a
-      // competing auto-advance while the smooth scroll is in flight
-      setActiveIndex(clamped);
       container.scrollTo({
         top: clamped * container.clientHeight,
         behavior: "smooth",
       });
     },
-    [clips.length, setActiveIndex]
-  );
-
-  const registerVideo = useCallback(
-    (index: number, el: HTMLVideoElement | null) => {
-      if (el) {
-        videoRegistry.current.set(index, el);
-      } else {
-        videoRegistry.current.delete(index);
-      }
-    },
-    []
-  );
-
-  const onClipEnded = useCallback(
-    (index: number) => {
-      // an item that finished after the user scrolled away must not advance
-      if (index !== activeIndexRef.current) return;
-      if (index < clips.length - 1) {
-        scrollToIndex(index + 1);
-      } else {
-        // end of the queue — replay the current clip
-        const video = videoRegistry.current.get(index);
-        if (video) {
-          video.currentTime = 0;
-          video.play().catch(() => {});
-        }
-      }
-    },
-    [clips.length, scrollToIndex]
+    [clips.length]
   );
 
   const exitFeed = useCallback(() => {
@@ -671,17 +494,13 @@ export const ClipFeed: React.FC = () => {
       return false;
     });
     Mousetrap.bind("space", () => {
-      const video = videoRegistry.current.get(activeIndex);
-      if (video) {
-        if (video.paused) video.play().catch(() => {});
-        else video.pause();
-      }
+      togglePlay();
       return false;
     });
     Mousetrap.bind(["left", "right"], (e, combo) => {
-      const video = videoRegistry.current.get(activeIndex);
+      const video = videoRef.current;
       if (video) {
-        video.currentTime += combo === "left" ? -5 : 5;
+        seek(video.currentTime + (combo === "left" ? -5 : 5));
       }
       return false;
     });
@@ -705,6 +524,9 @@ export const ClipFeed: React.FC = () => {
     };
   }, [
     activeIndex,
+    videoRef,
+    togglePlay,
+    seek,
     muted,
     scrollToIndex,
     setMutedPersistent,
@@ -785,16 +607,6 @@ export const ClipFeed: React.FC = () => {
           </button>
           <button
             type="button"
-            className={cx("clip-feed__top-btn", { "is-active": autoAdvance })}
-            onClick={() => setAutoAdvancePersistent(!autoAdvance)}
-            title={intl.formatMessage({
-              id: autoAdvance ? "clips_feed_autoplay" : "clips_feed_loop",
-            })}
-          >
-            <Icon icon={autoAdvance ? faForwardStep : faRepeat} />
-          </button>
-          <button
-            type="button"
             className="clip-feed__top-btn"
             onClick={() => setMutedPersistent(!muted)}
             title={intl.formatMessage({
@@ -807,6 +619,51 @@ export const ClipFeed: React.FC = () => {
       </div>
 
       <div className="clip-feed__scroller" ref={containerRef}>
+        <div
+          className="clip-feed__player"
+          hidden={!activeClip}
+          style={{ transform: `translateY(${activeIndex * 100}%)` }}
+        >
+          <video
+            ref={videoRef}
+            className="clip-feed__video"
+            data-clip-id={activeClip?.id}
+            poster={activeClip?.paths.screenshot ?? undefined}
+            preload="auto"
+            playsInline
+            loop
+            muted={muted}
+            {...events}
+          />
+          {status === "paused" && (
+            <div className="clip-feed__state-badge">
+              <Icon icon={faPlay} />
+            </div>
+          )}
+          {status === "loading" && (
+            <div className="clip-feed__buffering">
+              <LoadingIndicator inline small message="" />
+            </div>
+          )}
+          {(status === "blocked" || status === "error") && (
+            <button
+              type="button"
+              className="clip-feed__recovery"
+              onClick={retry}
+            >
+              <Icon icon={faPlay} />
+              <FormattedMessage
+                id={
+                  status === "error"
+                    ? "clips_feed_retry"
+                    : muted
+                    ? "clips_feed_tap_to_play"
+                    : "clips_feed_tap_to_play_sound"
+                }
+              />
+            </button>
+          )}
+        </div>
         {clips.map((clip, i) => (
           <FeedItem
             key={clip.id}
@@ -814,12 +671,13 @@ export const ClipFeed: React.FC = () => {
             index={i}
             active={i === activeIndex}
             mounted={Math.abs(i - activeIndex) <= MOUNT_RADIUS}
-            withVideo={Math.abs(i - activeIndex) <= VIDEO_RADIUS}
             muted={muted}
-            autoAdvance={autoAdvance}
+            progress={i === activeIndex ? progress : 0}
             onUnmute={() => setMutedPersistent(false)}
-            onEnded={onClipEnded}
-            registerVideo={registerVideo}
+            onTogglePlay={togglePlay}
+            onSeek={(fraction) =>
+              seek(fraction * (videoRef.current?.duration ?? 0))
+            }
           />
         ))}
 

@@ -8,6 +8,7 @@ src/core/generated-graphql.ts
 
 # testing
 /coverage
+/test-results
 
 # production
 /build
